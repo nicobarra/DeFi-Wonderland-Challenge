@@ -1,12 +1,8 @@
-import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
-import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-
-interface IEgg is IERC20 {
-  function mint(address, uint256) external;
-}
-
 //SPDX-License-Identifier: Unlicense
 pragma solidity >=0.8.4 <0.9.0;
+
+import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
+import './interfaces/IEgg.sol';
 
 contract Egg is ERC20, IEgg {
   address private _ants;
