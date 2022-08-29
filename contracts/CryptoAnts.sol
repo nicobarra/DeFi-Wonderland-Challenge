@@ -1,29 +1,10 @@
-import '@openzeppelin/contracts/token/ERC721/ERC721.sol';
-import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
-import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import 'hardhat/console.sol';
-
-interface IEgg is IERC20 {
-  function mint(address, uint256) external;
-}
-
-interface ICryptoAnts is IERC721 {
-  event EggsBought(address, uint256);
-
-  function notLocked() external view returns (bool);
-
-  function buyEggs(uint256) external payable;
-
-  error NoEggs();
-  event AntSold();
-  error NoZeroAddress();
-  event AntCreated();
-  error AlreadyExists();
-  error WrongEtherSent();
-}
-
 //SPDX-License-Identifier: Unlicense
 pragma solidity >=0.8.4 <0.9.0;
+
+import '@openzeppelin/contracts/token/ERC721/ERC721.sol';
+import 'hardhat/console.sol';
+import './interfaces/IEgg.sol';
+import './interfaces/ICryptoAnts.sol';
 
 contract CryptoAnts is ERC721, ICryptoAnts {
   bool public locked = false;
@@ -59,11 +40,9 @@ contract CryptoAnts is ERC721, ICryptoAnts {
 
   function sellAnt(uint256 _antId) external {
     require(antToOwner[_antId] == msg.sender, 'Unauthorized');
-    // solhint-disable-next-line
-    (bool success, ) = msg.sender.call{value: 0.004 ether}('');
-    require(success, 'Whoops, this call failed!');
     delete antToOwner[_antId];
     _burn(_antId);
+    payable(msg.sender).transfer(0.004 ether);
   }
 
   function getContractBalance() public view returns (uint256) {
