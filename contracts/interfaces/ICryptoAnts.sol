@@ -10,7 +10,7 @@ interface ICryptoAnts is IERC721 {
   event EggsCreated(address indexed owner, uint256 amount);
 
   // external functions
-  function buyEggs(uint256) external payable;
+  function buyEggs() external payable;
 
   function createEggsFromAnt(uint256) external;
 
