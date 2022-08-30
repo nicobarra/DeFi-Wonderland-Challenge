@@ -12,6 +12,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, ReentrancyGuard {
   IEgg public immutable eggs;
   uint256 public eggPrice = 0.01 ether;
   uint256 public antsCreated = 0;
+  uint256 public antsAlive = 0;
   uint256 public constant ANT_RECENTLY_CREATED = 100;
   uint256 public constant MAX_ANT_HEALTH = 100;
   uint256 public constant MAX_EGGS_FROM_ANT = 5;
@@ -31,9 +32,12 @@ contract CryptoAnts is ERC721, ICryptoAnts, ReentrancyGuard {
   }
 
   // method for buying eggs
-  function buyEggs(uint256 _amount) external payable override nonReentrant {
+  function buyEggs() external payable override nonReentrant {
     uint256 eggsCallerCanBuy = (msg.value / eggPrice);
-    eggs.mint(msg.sender, _amount);
+
+    if (eggsCallerCanBuy < 1) revert NoEggs();
+
+    eggs.mint(msg.sender, eggsCallerCanBuy);
     emit EggsBought(msg.sender, eggsCallerCanBuy);
   }
 
@@ -45,7 +49,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, ReentrancyGuard {
       uint256 _antId = ++antsCreated;
       ownerAnts[msg.sender][_antId] = Ant(true, 0, ANT_RECENTLY_CREATED);
 
-      _mint(msg.sender, _antId);
+      _createAnts(_antId);
     }
 
     eggs.burn(msg.sender, antsToCreate);
@@ -73,15 +77,14 @@ contract CryptoAnts is ERC721, ICryptoAnts, ReentrancyGuard {
     }
 
     uint256 eggsAmount = _calcEggsCreation();
-
     eggs.mint(msg.sender, eggsAmount);
+
     emit EggsCreated(msg.sender, eggsAmount);
   }
 
   // method for checking if the ant will die or not
-  // TODO(nb): check if owner is necessary or it could be msg.sender
-  function _antDies(address owner, uint256 _antId) internal view returns (bool antDies) {
-    uint256 eggsCreated = ownerAnts[owner][_antId].eggsCreated;
+  function _antDies(uint256 _antId) internal view returns (bool antDies) {
+    uint256 eggsCreated = ownerAnts[msg.sender][_antId].eggsCreated;
     antDies = false;
     uint256 random = _getRandomness();
 
@@ -108,6 +111,13 @@ contract CryptoAnts is ERC721, ICryptoAnts, ReentrancyGuard {
     }
 
     return 1;
+  }
+
+  function _createAnts(uint256 id) internal {
+    antsCreated += 1;
+    antsAlive += 1;
+
+    _mint(msg.sender, id);
   }
 
   // TODO(nb): Use VRF
