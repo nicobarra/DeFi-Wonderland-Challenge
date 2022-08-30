@@ -37,6 +37,7 @@
     "sort-package-json": "^1.52.0"
   },
   "devDependencies": {
+    "@chainlink/contracts": "^0.4.1",
     "@codechecks/client": "0.1.11",
     "@commitlint/cli": "13.1.0",
     "@commitlint/config-conventional": "13.1.0",
