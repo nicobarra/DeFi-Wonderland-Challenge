@@ -109,6 +109,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, VRFConsumerBaseV2, ReentrancyGuard {
 
   // method for getting a random number with the VRF
   // once the randomness is received, it will execute the funciton for creating eggs
+  // solhint-disable-next-line
   function fulfillRandomWords(
     uint256, /* requestId */
     uint256[] memory randomNumbers
