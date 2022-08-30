@@ -20,11 +20,9 @@ contract AntsDAO is IAntsDAO {
   }
 
   function proposeEggPrice(uint256 proposedPrice) external override enoughEggs {
-    _proposal = proposals[proposedPrice];
+    if (proposedPrice == eggPrice || proposals[proposedPrice].id != 0) revert PriceAlreadyExists();
 
-    if (proposedPrice == eggPrice || _proposal.id != 0) revert PriceAlreadyExists();
-
-    _proposal = ProposalInfo(proposalId, block.timestamp, Status.Pending, 0);
+    proposals[proposedPrice] = ProposalInfo(proposalId, block.timestamp, Status.Pending, 0);
     proposalId += 1;
   }
 
