@@ -4,18 +4,33 @@ pragma solidity >=0.8.4 <0.9.0;
 import '@openzeppelin/contracts/token/ERC721/ERC721.sol';
 import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
 import '@openzeppelin/contracts/utils/math/SafeMath.sol';
+import '@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol';
+import '@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol';
 import 'hardhat/console.sol';
 import './interfaces/IEgg.sol';
 import './interfaces/ICryptoAnts.sol';
 
-contract CryptoAnts is ERC721, ICryptoAnts, ReentrancyGuard {
+contract CryptoAnts is ERC721, ICryptoAnts, VRFConsumerBaseV2, ReentrancyGuard {
   IEgg public immutable eggs;
   uint256 public eggPrice = 0.01 ether;
   uint256 public antsCreated = 0;
   uint256 public antsAlive = 0;
   uint256 public constant ANT_RECENTLY_CREATED = 100;
   uint256 public constant MAX_ANT_HEALTH = 100;
-  uint256 public constant MAX_EGGS_FROM_ANT = 5;
+  uint256 public constant MIN_EGGS_FROM_ANT = 1;
+
+  // this is for managing the vrf randomness when creating a new egg
+  address private _ownerRequested;
+  uint256 private _requestedAntId;
+
+  // VRF variables
+  VRFCoordinatorV2Interface private immutable _vrfCoordinator;
+  bytes32 private immutable _keyHash; // gasLane: Max gas price you're willing to pay in wei for a request (in VRF V2)
+  uint64 private immutable _subscriptionId; // id of the VRF V2 sub
+  uint32 private immutable _callbackGasLimit; // Max gas price you're willing to pay in wei in the VRF V2 callback (fullFillRandomness, the 2nd tx)
+  uint16 public constant REQUEST_CONFIRMATIONS = 2;
+  uint32 public constant NUM_NUMBERS = 1; // Number of nums that VRF is gonna return
+  bool private _randomnessUsed;
 
   struct Ant {
     bool isAlive; // needed for assertion in sellAnt
@@ -27,8 +42,18 @@ contract CryptoAnts is ERC721, ICryptoAnts, ReentrancyGuard {
   /// @dev mapping(owner => mapping(antId => Ant))
   mapping(address => mapping(uint256 => Ant)) public ownerAnts;
 
-  constructor(address _eggs) ERC721('Crypto Ants', 'ANTS') {
+  constructor(
+    address _eggs,
+    address vrfCoordinatorV2,
+    bytes32 keyHash,
+    uint64 subscriptionId,
+    uint32 callbackGasLimit
+  ) ERC721('Crypto Ants', 'ANTS') VRFConsumerBaseV2(vrfCoordinatorV2) {
     eggs = IEgg(_eggs);
+    _vrfCoordinator = VRFCoordinatorV2Interface(vrfCoordinatorV2);
+    _keyHash = keyHash;
+    _subscriptionId = subscriptionId;
+    _callbackGasLimit = callbackGasLimit;
   }
 
   // method for buying eggs
@@ -56,13 +81,11 @@ contract CryptoAnts is ERC721, ICryptoAnts, ReentrancyGuard {
     emit AntsCreated(msg.sender, antsToCreate);
   }
 
-  // TODO(nb): check if update isAlive to false or burn the NFT
   function sellAnt(uint256 _antId) external override {
     if (!ownerAnts[msg.sender][_antId].isAlive) revert NoAnt();
 
-    ownerAnts[msg.sender][_antId].isAlive = false;
-    // delete ownerAnts[msg.sender][_antId];
-    // _burn(_antId);
+    delete ownerAnts[msg.sender][_antId];
+    antsAlive -= 1;
 
     payable(msg.sender).transfer(0.004 ether);
   }
@@ -76,21 +99,52 @@ contract CryptoAnts is ERC721, ICryptoAnts, ReentrancyGuard {
       revert NotEnoughTimePassed();
     }
 
-    uint256 eggsAmount = _calcEggsCreation();
-    eggs.mint(msg.sender, eggsAmount);
+    // set the state for the requested ant to create eggs after receiviing the randomness
+    _ownerRequested = msg.sender;
+    _requestedAntId = _antId;
 
+    // request randomness
+    _vrfCoordinator.requestRandomWords(_keyHash, _subscriptionId, REQUEST_CONFIRMATIONS, _callbackGasLimit, NUM_NUMBERS);
+  }
+
+  // method for getting a random number with the VRF
+  // once the randomness is received, it will execute the funciton for creating eggs
+  function fulfillRandomWords(
+    uint256, /* requestId */
+    uint256[] memory randomNumbers
+  ) internal override {
+    // transform the random number result to a number between 1 and 30 inclusively
+    uint256 normalizedRandom = (randomNumbers[0] % 30) + 1;
+    _createEggsFromAnt(_ownerRequested, _requestedAntId, normalizedRandom);
+  }
+
+  // method with the logic for execute the creating and checking if the ant dies based on the randomness
+  function _createEggsFromAnt(
+    address ownerAddr,
+    uint256 antId,
+    uint256 randomNumber
+  ) internal {
+    Ant memory ant = ownerAnts[ownerAddr][antId];
+    uint256 eggsAmount = _calcEggsCreation(randomNumber);
+    ant.eggsCreated += eggsAmount;
+
+    bool antDies = _antDies(antId, randomNumber);
+    if (!antDies) ant.isAlive = false;
+
+    delete _ownerRequested;
+    delete _requestedAntId;
+
+    eggs.mint(msg.sender, eggsAmount);
     emit EggsCreated(msg.sender, eggsAmount);
   }
 
   // method for checking if the ant will die or not
-  function _antDies(uint256 _antId) internal view returns (bool antDies) {
+  function _antDies(uint256 _antId, uint256 randomNumber) internal view returns (bool antDies) {
     uint256 eggsCreated = ownerAnts[msg.sender][_antId].eggsCreated;
     antDies = false;
-    uint256 random = _getRandomness();
 
-    // by this way, there is a random part but another part
-    // that is based in how many eggs the ant has created
-    if (random * (eggsCreated / 2) > MAX_ANT_HEALTH) {
+    // by this way, there is a random part (1, 30) but another part that is based in how many eggs the ant has created
+    if (randomNumber * (eggsCreated / 2) > MAX_ANT_HEALTH) {
       antDies = true;
     }
   }
@@ -102,15 +156,13 @@ contract CryptoAnts is ERC721, ICryptoAnts, ReentrancyGuard {
   }
 
   // method for calculating how much eggs is going to create the ant
-  function _calcEggsCreation() internal pure returns (uint256) {
-    uint256 random = _getRandomness();
-
+  function _calcEggsCreation(uint256 randomNumber) internal pure returns (uint256) {
     // 50% probabilities of creating the double amount each time
-    if (random % 2 == 0) {
-      return MAX_ANT_HEALTH;
+    if (randomNumber % 2 == 0) {
+      return MIN_EGGS_FROM_ANT * 2;
     }
 
-    return 1;
+    return MIN_EGGS_FROM_ANT;
   }
 
   function _createAnts(uint256 id) internal {
@@ -118,11 +170,6 @@ contract CryptoAnts is ERC721, ICryptoAnts, ReentrancyGuard {
     antsAlive += 1;
 
     _mint(msg.sender, id);
-  }
-
-  // TODO(nb): Use VRF
-  function _getRandomness() internal pure returns (uint256) {
-    return 50;
   }
 
   function getContractBalance() external view returns (uint256) {
