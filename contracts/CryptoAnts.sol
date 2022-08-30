@@ -9,10 +9,9 @@ import '@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol';
 import 'hardhat/console.sol';
 import './interfaces/IEgg.sol';
 import './interfaces/ICryptoAnts.sol';
+import './AntsDAO.sol';
 
-contract CryptoAnts is ERC721, ICryptoAnts, VRFConsumerBaseV2, ReentrancyGuard {
-  IEgg public immutable eggs;
-  uint256 public eggPrice = 0.01 ether;
+contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, ReentrancyGuard {
   uint256 public antsCreated = 0;
   uint256 public antsAlive = 0;
   uint256 public constant ANT_RECENTLY_CREATED = 100;
@@ -44,12 +43,14 @@ contract CryptoAnts is ERC721, ICryptoAnts, VRFConsumerBaseV2, ReentrancyGuard {
 
   constructor(
     address _eggs,
+    uint256 _proposalPeriod,
     address vrfCoordinatorV2,
     bytes32 keyHash,
     uint64 subscriptionId,
     uint32 callbackGasLimit
   ) ERC721('Crypto Ants', 'ANTS') VRFConsumerBaseV2(vrfCoordinatorV2) {
     eggs = IEgg(_eggs);
+    proposalPeriod = _proposalPeriod;
     _vrfCoordinator = VRFCoordinatorV2Interface(vrfCoordinatorV2);
     _keyHash = keyHash;
     _subscriptionId = subscriptionId;
