@@ -4,16 +4,25 @@ pragma solidity >=0.8.4 <0.9.0;
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 
 interface ICryptoAnts is IERC721 {
-  event EggsBought(address, uint256);
+  // events
+  event EggsBought(address indexed owner, uint256 amount);
+  event AntsCreated(address indexed owner, uint256 amount);
+  event EggsCreated(address indexed owner, uint256 amount);
 
-  function notLocked() external view returns (bool);
-
+  // external functions
   function buyEggs(uint256) external payable;
 
+  function createEggsFromAnt(uint256) external;
+
+  function sellAnt(uint256) external;
+
+  function setEggPrice(uint256) external;
+
+  // errors
   error NoEggs();
-  event AntSold();
+  error NoAnt();
   error NoZeroAddress();
-  event AntCreated();
+  error NotEnoughTimePassed();
   error AlreadyExists();
   error WrongEtherSent();
 }
