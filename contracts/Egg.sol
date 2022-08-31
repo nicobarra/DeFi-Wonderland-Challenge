@@ -12,7 +12,12 @@ contract Egg is ERC20, IEgg {
     _;
   }
 
-  constructor(address __ants) ERC20('EGG', 'EGG') {
+  modifier notZeroAddress(address tokenAddr) {
+    if (tokenAddr == address(0)) revert NoZeroAddress();
+    _;
+  }
+
+  constructor(address __ants) ERC20('EGG', 'EGG') notZeroAddress(__ants) {
     _ants = __ants;
   }
 
@@ -20,9 +25,9 @@ contract Egg is ERC20, IEgg {
     _mint(_to, _amount);
   }
 
-  function burn(address eggOwner, uint256 eggsToBurn) external override onyAnts {
+  function burn(address _from, uint256 _amount) external override onyAnts {
     // only an ant can be created with a single egg per time
-    _burn(eggOwner, eggsToBurn);
+    _burn(_from, _amount);
   }
 
   function decimals() public view virtual override returns (uint8) {
