@@ -8,7 +8,7 @@ contract AntsDAO is IAntsDAO {
   IEgg public eggs;
   uint256 public eggPrice = 0.01 ether;
   uint256 public proposalId = 1;
-  uint256 public proposalPeriod; // for checking easier to it
+  uint256 public constant PROPOSAL_PERIOD = 4 days;
   ProposalInfo private _proposal;
 
   /// @dev mapping(proposalPrice => ProposalInfo)
@@ -37,7 +37,7 @@ contract AntsDAO is IAntsDAO {
     _proposal = proposals[proposedPrice];
     if (_proposal.status != Status.Pending) revert ClosedProposal();
 
-    if (block.timestamp - _proposal.timestamp < proposalPeriod) {
+    if (block.timestamp - _proposal.timestamp < PROPOSAL_PERIOD) {
       revert UnfinishedPeriod();
     }
 
