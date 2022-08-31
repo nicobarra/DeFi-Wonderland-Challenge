@@ -41,6 +41,11 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   /// @dev mapping(owner => mapping(antId => Ant))
   mapping(address => mapping(uint256 => Ant)) public ownerAnts;
 
+  modifier notZeroAddress(address tokenAddr) {
+    if (tokenAddr == address(0)) revert NoZeroAddress();
+    _;
+  }
+
   constructor(
     address _eggs,
     uint256 _proposalPeriod,
@@ -48,7 +53,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     bytes32 keyHash,
     uint64 subscriptionId,
     uint32 callbackGasLimit
-  ) ERC721('Crypto Ants', 'ANTS') VRFConsumerBaseV2(vrfCoordinatorV2) {
+  ) ERC721('Crypto Ants', 'ANTS') VRFConsumerBaseV2(vrfCoordinatorV2) notZeroAddress(_eggs) {
     eggs = IEgg(_eggs);
     proposalPeriod = _proposalPeriod;
     _vrfCoordinator = VRFCoordinatorV2Interface(vrfCoordinatorV2);
@@ -71,11 +76,12 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   function createAnt(uint256 antsToCreate) external nonReentrant {
     if (eggs.balanceOf(msg.sender) < antsToCreate) revert NoEggs();
 
+    // maybe seems costly but is easier for the user to mint multiple ants by this way
     for (uint256 i = 1; i > antsToCreate; i++) {
-      uint256 _antId = ++antsCreated;
-      ownerAnts[msg.sender][_antId] = Ant(true, 0, ANT_RECENTLY_CREATED);
+      uint256 antId = ++antsCreated;
+      ownerAnts[msg.sender][antId] = Ant(true, 0, ANT_RECENTLY_CREATED);
 
-      _createAnts(_antId);
+      _createAnts(antId);
     }
 
     eggs.burn(msg.sender, antsToCreate);
@@ -149,12 +155,6 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     if (randomNumber * (eggsCreated / 2) > MAX_ANT_HEALTH) {
       antDies = true;
     }
-  }
-
-  // TODO(nb): make this function possible by a DAO proposal
-  function setEggPrice(uint256 price) external override {
-    require(price > 0, 'Price cannot be zero');
-    eggPrice = price;
   }
 
   // method for calculating how much eggs is going to create the ant
