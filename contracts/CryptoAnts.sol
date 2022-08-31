@@ -48,14 +48,12 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
 
   constructor(
     address _eggs,
-    uint256 _proposalPeriod,
     address vrfCoordinatorV2,
     bytes32 keyHash,
     uint64 subscriptionId,
     uint32 callbackGasLimit
   ) ERC721('Crypto Ants', 'ANTS') VRFConsumerBaseV2(vrfCoordinatorV2) notZeroAddress(_eggs) {
     eggs = IEgg(_eggs);
-    proposalPeriod = _proposalPeriod;
     _vrfCoordinator = VRFCoordinatorV2Interface(vrfCoordinatorV2);
     _keyHash = keyHash;
     _subscriptionId = subscriptionId;
