@@ -16,8 +16,6 @@ interface ICryptoAnts is IERC721 {
 
   function sellAnt(uint256) external;
 
-  function setEggPrice(uint256) external;
-
   // errors
   error NoEggs();
   error NoAnt();
