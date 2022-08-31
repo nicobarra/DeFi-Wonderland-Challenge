@@ -7,7 +7,7 @@ import './interfaces/IEgg.sol';
 contract Egg is ERC20, IEgg {
   address private _ants;
 
-  modifier onyAnts() {
+  modifier onlyAnts() {
     if (msg.sender != _ants) revert OnlyAnts(_ants, msg.sender);
     _;
   }
@@ -21,11 +21,11 @@ contract Egg is ERC20, IEgg {
     _ants = __ants;
   }
 
-  function mint(address _to, uint256 _amount) external override onyAnts {
+  function mint(address _to, uint256 _amount) external override onlyAnts {
     _mint(_to, _amount);
   }
 
-  function burn(address _from, uint256 _amount) external override onyAnts {
+  function burn(address _from, uint256 _amount) external override onlyAnts {
     // only an ant can be created with a single egg per time
     _burn(_from, _amount);
   }
