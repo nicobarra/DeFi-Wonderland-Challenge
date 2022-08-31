@@ -1,9 +1,13 @@
-import { expect } from 'chai';
+import { expect, use } from 'chai';
 import { ethers } from 'hardhat';
-import { utils } from 'ethers';
+import { ContractTransaction, utils } from 'ethers';
+import { waffleChai } from '@ethereum-waffle/chai';
 import { CryptoAnts, CryptoAnts__factory, Egg, Egg__factory } from '@typechained';
 import { evm } from '@utils';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signers';
+import { deployVRFv2Mock, KEY_HASH, CALLBACK_GAS_LIMIT } from '../utils/vrf-mock';
+const logger = require('pino')();
+use(waffleChai);
 
 const FORK_BLOCK_NUMBER = 11298165;
 
@@ -39,9 +43,13 @@ describe('CryptoAnts', function () {
     const currentNonce = await ethers.provider.getTransactionCount(deployer.address);
     eggPrecalculatedAddress = utils.getContractAddress({ from: deployer.address, nonce: currentNonce });
 
-    // deploying contracts
+    // deploying VRF V2 Mock contract
+    const { vrfMockAddress, subscriptionId } = await deployVRFv2Mock();
+
+    // deploying CryptoAnts and Egg contracts
     cryptoAntsFactory = (await ethers.getContractFactory('CryptoAnts')) as CryptoAnts__factory;
-    cryptoAnts = await cryptoAntsFactory.deploy(eggPrecalculatedAddress);
+    cryptoAnts = await cryptoAntsFactory.deploy(eggPrecalculatedAddress, vrfMockAddress, KEY_HASH, subscriptionId, CALLBACK_GAS_LIMIT);
+
     eggFactory = (await ethers.getContractFactory('Egg')) as Egg__factory;
     egg = await eggFactory.connect(deployer).deploy(cryptoAnts.address);
 
@@ -53,17 +61,38 @@ describe('CryptoAnts', function () {
     await evm.snapshot.revert(snapshotId);
   });
 
-  it('should only allow the CryptoAnts contract to mint eggs');
+  describe('Robert e2e test proposed', () => {
+    it('should only allow the CryptoAnts contract to mint eggs', async () => {
+      const eggValue = await cryptoAnts.eggPrice();
+      const antTx = await cryptoAnts.connect(randomUser).buyEggs({ value: eggValue });
 
-  it('should buy an egg and create a new ant with it');
+      // if emits the event, the tx was successful
+      expect(antTx).to.emit(cryptoAnts, 'EggsBought');
+      // I didn't implemented 'calledOn' matchers because provider doesn;t support call history
 
-  it('should send funds to the user who sells an ant');
+      await expect(egg.connect(randomUser).mint(randomUser.address, eggValue)).to.be.revertedWith(
+        `OnlyAnts("${cryptoAnts.address}", "${randomUser.address}")`
+      );
+    });
 
-  it('should burn the ant after the user sells it');
+    it('should buy an egg and create a new ant with it');
 
-  /*
+    it('should send funds to the user who sells an ant');
+
+    it('should burn the ant after the user sells it');
+
+    /*
     This is a completely optional test.
     Hint: you may need advanceTimeAndBlock (from utils) to handle the egg creation cooldown
   */
-  it('should be able to create a 100 ants with only one initial egg');
+    it('should be able to create a 100 ants with only one initial egg');
+  });
+
+  describe('Other useful unit tests', () => {
+    it('should have the correct eggs contract address', async () => {
+      const eggsFromAntsContract = await cryptoAnts.eggs();
+
+      expect(eggsFromAntsContract).to.be.equal(egg.address);
+    });
+  });
 });
