@@ -3,41 +3,65 @@ pragma solidity >=0.8.4 <0.9.0;
 
 import './interfaces/IAntsDAO.sol';
 import './interfaces/IEgg.sol';
+import 'hardhat/console.sol';
 
 contract AntsDAO is IAntsDAO {
   IEgg public eggs;
   uint256 public eggPrice = 0.01 ether;
-  uint256 public proposalId = 1;
-  uint256 public constant PROPOSAL_PERIOD = 4 days;
-  ProposalInfo private _proposal;
+  uint256 private _proposalId;
+  uint256 public proposalPeriod;
 
-  /// @dev mapping(proposalPrice => ProposalInfo)
+  // constans
+  uint256 public constant ZERO_EGGS = 0;
+
+  enum Status {
+    Pristine,
+    Pending,
+    Current,
+    Closed
+  }
+
+  struct ProposalInfo {
+    uint256 price;
+    uint256 timestamp;
+    Status status;
+    uint256 votes;
+  }
+
+  /// @dev mapping(proposalId => ProposalInfo)
   mapping(uint256 => ProposalInfo) public proposals;
 
+  // This is for the user to know which prices are being proposed easier
+  uint256[] public proposedPrices;
+
   modifier enoughEggs() {
-    if (eggs.balanceOf(msg.sender) > 1) revert NotVotingPower();
+    if (eggs.balanceOf(msg.sender) < 1) revert NotVotingPower();
     _;
   }
 
   function proposeEggPrice(uint256 proposedPrice) external override enoughEggs {
-    if (proposedPrice == eggPrice || proposals[proposedPrice].id != 0) revert PriceAlreadyExists();
+    Status proposalStatus = proposals[proposedPrice].status;
+    if (proposedPrice == eggPrice || proposalStatus == Status.Pending || proposalStatus == Status.Current) {
+      revert PriceAlreadyExists();
+    }
 
-    proposals[proposedPrice] = ProposalInfo(proposalId, block.timestamp, Status.Pending, 0);
-    proposalId += 1;
+    // make proposal ids incremental for assuring they are the same in both data structures
+    proposals[_proposalId] = ProposalInfo(proposedPrice, block.timestamp, Status.Pending, ZERO_EGGS);
+    proposedPrices.push(proposedPrice);
+
+    _proposalId += 1;
   }
 
-  function approveProposal(uint256 proposedPrice) external override enoughEggs {
-    _proposal = proposals[proposedPrice];
-    if (_proposal.status != Status.Pending) revert ClosedProposal();
+  function approveProposal(uint256 proposalId) external override enoughEggs {
+    if (proposals[proposalId].status != Status.Pending) revert ProposalNotFound();
 
-    _proposal.votes += eggs.balanceOf(msg.sender);
+    proposals[proposalId].votes += eggs.balanceOf(msg.sender);
   }
 
-  function executeProposal(uint256 proposedPrice) external override {
-    _proposal = proposals[proposedPrice];
-    if (_proposal.status != Status.Pending) revert ClosedProposal();
+  function executeProposal(uint256 proposalId) external override {
+    if (proposals[proposalId].status != Status.Pending) revert ProposalNotFound();
 
-    if (block.timestamp - _proposal.timestamp < PROPOSAL_PERIOD) {
+    if (block.timestamp - proposals[proposalId].timestamp < proposalPeriod) {
       revert UnfinishedPeriod();
     }
 
@@ -45,14 +69,13 @@ contract AntsDAO is IAntsDAO {
     uint256 approvalsThreshold = totalSupply / 2;
     bool approved = false;
 
-    if (_proposal.votes > approvalsThreshold) {
+    if (proposals[proposalId].votes > approvalsThreshold) {
       approved = true;
-      eggPrice = proposedPrice;
+      eggPrice = proposals[proposalId].price;
     }
 
-    ProposalInfo memory eventProposal = _proposal; // this is with the unique purpose of emitting on the event
-    delete _proposal; // necessary for the price assertion
+    proposals[proposalId].status = Status.Closed;
 
-    emit ExecutedProposal(approved, proposedPrice, eventProposal);
+    emit ExecutedProposal(approved, proposalId);
   }
 }
