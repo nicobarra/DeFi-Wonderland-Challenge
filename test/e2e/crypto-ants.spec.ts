@@ -153,7 +153,7 @@ describe('CryptoAnts', function () {
       logger.info(`userEthBalanceAf : ${userEthBalanceAf}`);
       const antsBalanceAf = await cryptoAnts.balanceOf(randomUser.address);
 
-      const [antIsAlive] = await cryptoAnts.getAntById(randomUser.address, userAntsId);
+      const [, , antIsAlive] = await cryptoAnts.getAntInfo(userAntsId);
 
       expect(antsBalanceAf).to.be.equal(zero);
       expect(antIsAlive).to.be.false;
@@ -172,12 +172,15 @@ describe('CryptoAnts', function () {
 
       let i;
       for (i = 0; antsBalance.lt(100); i++) {
+        logger.info(i);
         // create ant
         await cryptoAnts.connect(randomUser).createAnt();
 
         // get last ant id
         const userAntsId = await cryptoAnts.getOwnerAntIds(randomUser.address);
+        logger.info(`userAntsId: ${userAntsId}`);
         const antId = userAntsId[userAntsId.length - 1]; // always gets the last for assuring is not dead
+        logger.info(`antId: ${antId}`);
         // lay egg from ant
         const tx = await cryptoAnts.connect(randomUser).layEggs(antId);
         const txReceipt = await tx.wait();
@@ -190,6 +193,8 @@ describe('CryptoAnts', function () {
         await vrfCoordinatorV2Mock.fulfillRandomWords(requestId, cryptoAnts.address);
 
         antsBalance = await cryptoAnts.balanceOf(randomUser.address);
+        logger.info(`antsBalance: ${antsBalance}`);
+        logger.info(`eggsBalance: ${await egg.balanceOf(randomUser.address)}`);
 
         // advance time period that the ant needs for lay an egg again
         await advanceTimeAndBlock(layEggsPeriod.toNumber() + 1);
