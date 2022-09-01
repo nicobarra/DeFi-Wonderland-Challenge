@@ -13,14 +13,15 @@ const networks: NetworksUserConfig = process.env.TEST
   ? {}
   : {
       hardhat: {
+        chainId: 5,
         forking: {
           enabled: process.env.FORK ? true : false,
-          url: process.env.RPC_ROPSTEN as string,
+          url: process.env.RPC_GOERLI as string,
         },
       },
-      ropsten: {
-        url: process.env.RPC_ROPSTEN,
-        accounts: [process.env.PRIVATE_KEY_ROPSTEN as string],
+      goerli: {
+        url: process.env.RPC_GOERLI,
+        accounts: [process.env.PRIVATE_KEY_GOERLI as string],
       },
     };
 
