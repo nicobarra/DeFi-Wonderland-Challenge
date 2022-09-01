@@ -22,14 +22,12 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   uint256 public constant EGGS_ANT_LAYS = 1;
   uint256 public constant MAX_ANTS_PER_EGG = 1;
   uint256 public constant MIN_LAY_PERIOD = 10 minutes;
+  bool public constant ANT_IS_ALIVE = true;
 
   // only for have a recording
   uint256 public antsAlive = 0;
-  uint256 private _antIdsCount;
-
-  // this is for managing the vrf randomness when creating a new egg
-  address private _ownerRequested;
-  uint256 private _requestedAntId;
+  uint256 private _antIdsCounter;
+  uint256 private _lastEggLayed;
 
   // VRF variables
   VRFCoordinatorV2Interface private immutable _vrfCoordinator;
@@ -40,6 +38,8 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   uint32 public constant NUM_NUMBERS = 1; // Number of nums that VRF is gonna return
 
   struct Ant {
+    address owner;
+    uint256 ownerCounter; // number of ant that owner has
     bool isAlive; // needed for assertion in sellAnt
     uint256 eggsCreated; // eggs that the ant layed
     uint256 timeLastEggLayed; // timestamp of the last egg layed
@@ -53,11 +53,11 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   /// @notice necessary for _layEgg func execution, since this contract doesn't
   /// executes this function directly, and is the random VRF which does.
   /// By managing this state is possible to exec logic correctly when the randomness arrives
-  OwnerAnt[] private _layEggQueue;
+  uint256[] private _layEggQueue;
 
   // An owner could have different Ants
   /// @dev mapping(owner => mapping(antId => Ant))
-  mapping(address => mapping(uint256 => Ant)) public ownerAnts;
+  mapping(uint256 => Ant) public ownerAnts;
 
   /// @dev mapping(owner => antId[]))
   mapping(address => uint256[]) public ownerIds;
@@ -65,6 +65,11 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   // modifier that checks that the inserted address is not the zero address
   modifier notZeroAddress(address tokenAddr) {
     if (tokenAddr == address(0)) revert NoZeroAddress();
+    _;
+  }
+
+  modifier checkAntOwner(uint256 antId) {
+    if (ownerAnts[antId].owner != msg.sender) revert NotOwner();
     _;
   }
 
@@ -95,28 +100,29 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   }
 
   // this function keeps the ants created by sender incremental
-  function createAnt() external {
+  function createAnt() external override {
     if (eggs.balanceOf(msg.sender) < 1) revert NoEggs();
 
-    _antIdsCount += 1;
-    ownerIds[msg.sender].push(_antIdsCount);
-    ownerAnts[msg.sender][_antIdsCount] = Ant(true, ZERO_EGGS, ANT_RECENTLY_CREATED);
+    _antIdsCounter += 1;
+    uint256 antIdx = ownerIds[msg.sender].length + 1;
+    ownerAnts[_antIdsCounter] = Ant(msg.sender, antIdx, ANT_IS_ALIVE, ZERO_EGGS, ANT_RECENTLY_CREATED);
+    ownerIds[msg.sender].push(_antIdsCounter);
 
-    _createAnts(_antIdsCount);
+    _createAnts(_antIdsCounter);
     emit AntsCreated(msg.sender, 1);
   }
 
   function sellAnt(uint256 _antId) external override {
     console.log(1);
-    if (!ownerAnts[msg.sender][_antId].isAlive) revert NoAnt();
+    if (!ownerAnts[_antId].isAlive) revert NoAnt();
 
     console.log(2);
-    delete ownerAnts[msg.sender][_antId];
+    delete ownerAnts[_antId];
     console.log(3);
-    delete ownerIds[msg.sender][_antId - 1]; // this is possible because the ant ids are incremental and equal in both mappings
+    uint256 idxToDel = ownerAnts[_antId].ownerCounter;
+    delete ownerIds[msg.sender][idxToDel]; // this is possible because the ant ids are incremental and equal in both mappings
     console.log(4);
     antsAlive -= 1;
-    // _antIdsCount += 1; ??
 
     console.log('burning...');
     _burn(_antId);
@@ -126,16 +132,17 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
 
   // method for creating eggs from ants
   function layEggs(uint256 _antId) external override nonReentrant {
-    if (!ownerAnts[msg.sender][_antId].isAlive) revert NoAnt();
+    if (!ownerAnts[_antId].isAlive) revert NoAnt();
 
-    uint256 lastEggCreated = ownerAnts[msg.sender][_antId].timeLastEggLayed;
+    uint256 lastEggCreated = ownerAnts[_antId].timeLastEggLayed;
     if ((lastEggCreated != ANT_RECENTLY_CREATED) && (block.timestamp - lastEggCreated < MIN_LAY_PERIOD)) {
       revert NotEnoughTimePassed();
     }
 
+    console.log('ant id before pushing:', _antId);
     // set the state for the requested ant to create eggs after receiviing the randomness
-    _layEggQueue.push(OwnerAnt(msg.sender, _antId));
-
+    _layEggQueue.push(_antId);
+    console.log(_layEggQueue[0]);
     // request randomness
     console.log('requesting...');
     uint256 requestId = _vrfCoordinator.requestRandomWords(_keyHash, _subscriptionId, REQUEST_CONFIRMATIONS, _callbackGasLimit, NUM_NUMBERS);
@@ -157,32 +164,40 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     _layEggs(normalizedRandom);
   }
 
+  // TODO: before trnasfer func
+  // function _beforeTokenTransfer(
+  //         address from,
+  //         address to,
+  //         uint256 tokenId
+  //     ) internal virtual {}
+
   // method with the logic for execute the creating and checking if the ant dies based on the randomness
   function _layEggs(uint256 randomNumber) internal {
     console.log('_layEggs');
-    address ownerAddr = _layEggQueue[0].ownerAddress;
-    uint256 antId = _layEggQueue[0].antId;
+    console.log('len', _layEggQueue.length);
+    console.log('last', _layEggQueue[_layEggQueue.length - 1]);
+    uint256 antId = _layEggQueue[_lastEggLayed];
+    console.log('antId', antId);
 
-    Ant memory ant = ownerAnts[ownerAddr][antId];
+    console.log('randomNumber', randomNumber);
+
     uint256 eggsAmount = _calcEggsCreation(randomNumber);
-    ant.eggsCreated += eggsAmount;
+    ownerAnts[antId].eggsCreated += eggsAmount;
 
     bool antDies = _antDies(antId, randomNumber);
-    if (!antDies) ant.isAlive = false;
+    if (!antDies) ownerAnts[antId].isAlive = false;
 
-    delete _ownerRequested;
-    delete _requestedAntId;
+    _lastEggLayed += 1;
 
-    console.log('minting...');
-    eggs.mint(ownerAddr, eggsAmount);
-    console.log(eggsAmount);
+    console.log('minting...', eggsAmount);
+    eggs.mint(ownerAnts[antId].owner, eggsAmount);
 
-    emit EggsCreated(ownerAddr, eggsAmount);
+    emit EggsCreated(ownerAnts[antId].owner, eggsAmount);
   }
 
   // method for checking if the ant will die or not
   function _antDies(uint256 _antId, uint256 randomNumber) internal view returns (bool antDies) {
-    uint256 eggsCreated = ownerAnts[msg.sender][_antId].eggsCreated;
+    uint256 eggsCreated = ownerAnts[_antId].eggsCreated;
     antDies = false;
 
     // by this way, there is a random part (1, 30) but another part that is based in how many eggs the ant has created
@@ -226,7 +241,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     return ownerIds[ownerAddr];
   }
 
-  function getAntById(address ownerAddr, uint256 antId) external view returns (Ant memory) {
-    return ownerAnts[ownerAddr][antId];
+  function getAntInfo(uint256 antId) external view returns (Ant memory) {
+    return ownerAnts[antId];
   }
 }
