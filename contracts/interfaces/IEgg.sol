@@ -8,6 +8,5 @@ interface IEgg is IERC20 {
 
   function burn(address, uint256) external;
 
-  error OnlyAnts(address ants, address badSender);
   error NoZeroAddress();
 }
