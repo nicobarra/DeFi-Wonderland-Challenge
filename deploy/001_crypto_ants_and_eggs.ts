@@ -1,7 +1,7 @@
 import { ethers } from 'hardhat';
 import { DeployFunction } from 'hardhat-deploy/types';
 import { HardhatRuntimeEnvironment } from 'hardhat/types';
-import { shouldVerifyContract } from 'utils/deploy';
+import { shouldVerifyContract } from 'helpers/deploy';
 
 const deployFunction: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployer } = await hre.getNamedAccounts();
