@@ -7,6 +7,4 @@ interface IEgg is IERC20 {
   function mint(address, uint256) external;
 
   function burn(address, uint256) external;
-
-  error NoZeroAddress();
 }
