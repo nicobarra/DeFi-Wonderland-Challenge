@@ -12,8 +12,11 @@ const { VRF_CCORDINATORV2_GOERLI, KEY_HASH_GOERLI, SUBSCRIPTION_ID_GOERLI, CALLB
 if (!VRF_CCORDINATORV2_GOERLI || !KEY_HASH_GOERLI || !SUBSCRIPTION_ID_GOERLI || !CALLBACK_GAS_LIMIT) {
   throw new Error('Missing information');
 }
-const deploy = async (proposalPeriod: string) => {
-  const [user] = await ethers.getSigners();
+
+const deploy = async (proposalPeriod?: string): Promise<string[]> => {
+  if (!proposalPeriod) {
+    proposalPeriod = '60';
+  }
 
   const cryptoAntsFactory = (await ethers.getContractFactory('CryptoAnts')) as CryptoAnts__factory;
   const eggFactory = (await ethers.getContractFactory('Egg')) as Egg__factory;
@@ -38,13 +41,10 @@ const deploy = async (proposalPeriod: string) => {
   const tx = await egg.transferOwnership(cryptoAnts.address);
   await tx.wait();
   logger.info(`Ownership Transferred, the new owner is: ${await egg.owner()}`);
+
+  return [cryptoAnts.address, egg.address];
 };
 
 (async () => {
-  let proposalPeriod = PROPOSAL_PERIOD;
-  if (!proposalPeriod) {
-    proposalPeriod = '60'; //60 secs
-  }
-
-  await deploy(proposalPeriod);
+  await deploy(PROPOSAL_PERIOD);
 })();
