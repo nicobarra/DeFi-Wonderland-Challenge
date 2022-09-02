@@ -9,11 +9,6 @@ contract Egg is Ownable, ERC20, IEgg {
   // solhint-disable-next-line
   constructor() ERC20('EGG', 'EGG') {}
 
-  modifier notZeroAddress(address tokenAddr) {
-    if (tokenAddr == address(0)) revert NoZeroAddress();
-    _;
-  }
-
   function mint(address _to, uint256 _amount) external override onlyOwner {
     _mint(_to, _amount);
   }
