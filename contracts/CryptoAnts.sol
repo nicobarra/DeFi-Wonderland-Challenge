@@ -170,11 +170,12 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     if (from == address(0) || to == address(0)) return;
     // delete the previous owner info
     uint256 prevOwnerId = ownerAnts[tokenId].ownerCounter;
-    console.log('prevOwnerId', prevOwnerId);
     delete ownerIds[from][prevOwnerId];
 
     // update the info for the new owner that receives the NFT
-    uint256 antIdxTo = ownerIds[to].length + 1;
+    uint256 antIdxTo = ownerIds[to].length;
+    ownerIds[to].push(tokenId);
+
     ownerAnts[_antIdsCounter].owner = to;
     ownerAnts[_antIdsCounter].ownerCounter = antIdxTo;
   }
