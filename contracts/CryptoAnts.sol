@@ -121,6 +121,8 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     console.log('ownerAnts[_antId + 1]', ownerAnts[_antId + 1].owner);
 
     payable(msg.sender).transfer(ANTS_PRICE);
+
+    emit AntSold(msg.sender, _antId);
   }
 
   // method for creating eggs from ants
