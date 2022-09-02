@@ -62,19 +62,8 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   /// @dev mapping(owner => antId[]))
   mapping(address => uint256[]) public ownerIds;
 
-  // modifier that checks that the inserted address is not the zero address
-  modifier notZeroAddress(address tokenAddr) {
-    if (tokenAddr == address(0)) revert NoZeroAddress();
-    _;
-  }
-
   modifier checkAntOwner(uint256 antId) {
     if (ownerAnts[antId].owner != msg.sender) revert NotAntOwner();
-    _;
-  }
-
-  modifier notIdZero(uint256 antId) {
-    if (antId == 0) revert NoAnt();
     _;
   }
 
@@ -85,7 +74,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     uint64 subscriptionId,
     uint32 callbackGasLimit,
     uint256 _proposalPeriod
-  ) ERC721('Crypto Ants', 'ANTS') VRFConsumerBaseV2(vrfCoordinatorV2) notZeroAddress(_eggs) {
+  ) ERC721('Crypto Ants', 'ANTS') VRFConsumerBaseV2(vrfCoordinatorV2) {
     eggs = IEgg(_eggs);
     _vrfCoordinator = VRFCoordinatorV2Interface(vrfCoordinatorV2);
     _keyHash = keyHash;
@@ -117,7 +106,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     emit AntsCreated(msg.sender, 1);
   }
 
-  function sellAnt(uint256 _antId) external override notIdZero(_antId) {
+  function sellAnt(uint256 _antId) external override {
     console.log(1);
     if (!ownerAnts[_antId].isAlive) revert NoAnt();
 
@@ -137,7 +126,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   }
 
   // method for creating eggs from ants
-  function layEggs(uint256 _antId) external override notIdZero(_antId) nonReentrant {
+  function layEggs(uint256 _antId) external override nonReentrant {
     if (!ownerAnts[_antId].isAlive) revert NoAnt();
 
     uint256 lastEggCreated = ownerAnts[_antId].timeLastEggLayed;
@@ -257,7 +246,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     return ownerIds[ownerAddr];
   }
 
-  function getAntInfo(uint256 antId) external view notIdZero(antId) returns (Ant memory) {
+  function getAntInfo(uint256 antId) external view returns (Ant memory) {
     return ownerAnts[antId];
   }
 }
