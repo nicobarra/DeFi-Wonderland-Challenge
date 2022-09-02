@@ -9,16 +9,19 @@ contract Egg is Ownable, ERC20, IEgg {
   // solhint-disable-next-line
   constructor() ERC20('EGG', 'EGG') {}
 
+  // method for miting an egg 'amount' to '_to'. Restricted to the contract owner
   function mint(address _to, uint256 _amount) external override onlyOwner {
     _mint(_to, _amount);
   }
 
+  // method for burning an egg 'amount' from '_from'. Restricted to the contract owner
   function burn(address _from, uint256 _amount) external override onlyOwner {
-    // only an ant can be created with a single egg per time
     _burn(_from, _amount);
   }
 
+  // method for view the egg token decimals
   function decimals() public view virtual override returns (uint8) {
+    // the egg token is indivisible so it returns 0
     return 0;
   }
 }
