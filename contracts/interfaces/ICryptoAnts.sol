@@ -6,8 +6,9 @@ import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 interface ICryptoAnts is IERC721 {
   // events
   event EggsBought(address indexed owner, uint256 amount);
-  event AntsCreated(address indexed owner, uint256 amount);
+  event AntsCreated(address indexed owner, uint256 antId);
   event EggsCreated(address indexed owner, uint256 amount);
+  event AntSold(address indexed owner, uint256 antId);
 
   // external functions
   function buyEggs() external payable;
