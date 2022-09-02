@@ -69,7 +69,12 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   }
 
   modifier checkAntOwner(uint256 antId) {
-    if (ownerAnts[antId].owner != msg.sender) revert NotOwner();
+    if (ownerAnts[antId].owner != msg.sender) revert NotAntOwner();
+    _;
+  }
+
+  modifier notIdZero(uint256 antId) {
+    if (antId == 0) revert NoAnt();
     _;
   }
 
@@ -112,7 +117,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     emit AntsCreated(msg.sender, 1);
   }
 
-  function sellAnt(uint256 _antId) external override {
+  function sellAnt(uint256 _antId) external override notIdZero(_antId) {
     console.log(1);
     if (!ownerAnts[_antId].isAlive) revert NoAnt();
 
@@ -124,6 +129,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     console.log(4);
     antsAlive -= 1;
 
+    console.log(2);
     console.log('burning...');
     _burn(_antId);
     console.log(1);
@@ -131,7 +137,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   }
 
   // method for creating eggs from ants
-  function layEggs(uint256 _antId) external override nonReentrant {
+  function layEggs(uint256 _antId) external override notIdZero(_antId) nonReentrant {
     if (!ownerAnts[_antId].isAlive) revert NoAnt();
 
     uint256 lastEggCreated = ownerAnts[_antId].timeLastEggLayed;
@@ -164,12 +170,22 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     _layEggs(normalizedRandom);
   }
 
-  // TODO: before trnasfer func
-  // function _beforeTokenTransfer(
-  //         address from,
-  //         address to,
-  //         uint256 tokenId
-  //     ) internal virtual {}
+  function _beforeTokenTransfer(
+    address from,
+    address to,
+    uint256 tokenId
+  ) internal override {
+    if (from == address(0)) return;
+    // delete the previous owner info
+    uint256 prevOwnerId = ownerAnts[tokenId].ownerCounter;
+    console.log('prevOwnerId', prevOwnerId);
+    delete ownerIds[from][prevOwnerId];
+
+    // update the info for the new owner that receives the NFT
+    uint256 antIdxTo = ownerIds[to].length + 1;
+    ownerAnts[_antIdsCounter].owner = to;
+    ownerAnts[_antIdsCounter].ownerCounter = antIdxTo;
+  }
 
   // method with the logic for execute the creating and checking if the ant dies based on the randomness
   function _layEggs(uint256 randomNumber) internal {
@@ -187,7 +203,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     bool antDies = _antDies(antId, randomNumber);
     if (!antDies) ownerAnts[antId].isAlive = false;
 
-    _lastEggLayed += 1;
+    _lastEggLayed = _layEggQueue.length;
 
     console.log('minting...', eggsAmount);
     eggs.mint(ownerAnts[antId].owner, eggsAmount);
@@ -241,7 +257,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     return ownerIds[ownerAddr];
   }
 
-  function getAntInfo(uint256 antId) external view returns (Ant memory) {
+  function getAntInfo(uint256 antId) external view notIdZero(antId) returns (Ant memory) {
     return ownerAnts[antId];
   }
 }
