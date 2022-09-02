@@ -67,14 +67,17 @@ contract AntsDAO is IAntsDAO {
 
     uint256 totalSupply = eggs.totalSupply();
     uint256 approvalsThreshold = totalSupply / 2;
+
     bool approved = false;
+    Status status = Status.Closed;
 
     if (proposals[proposalId].votes > approvalsThreshold) {
       approved = true;
       eggPrice = proposals[proposalId].price;
+      status = Status.Current;
     }
 
-    proposals[proposalId].status = Status.Closed;
+    proposals[proposalId].status = status;
 
     emit ExecutedProposal(approved, proposalId);
   }
