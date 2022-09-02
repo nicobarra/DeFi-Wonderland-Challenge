@@ -21,9 +21,7 @@ interface ICryptoAnts is IERC721 {
   // errors
   error NoEggs();
   error NoAnt();
-  error NotOwner();
   error NoZeroAddress();
+  error NotAntOwner();
   error NotEnoughTimePassed();
-  error AlreadyExists();
-  error WrongEtherSent();
 }
