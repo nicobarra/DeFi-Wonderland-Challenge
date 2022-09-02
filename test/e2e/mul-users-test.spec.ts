@@ -225,6 +225,86 @@ describe('CryptoAnts-Multiple Users', function () {
       expect(antIdx).to.be.equal(0);
     });
 
-    it('2 users should be able to propose, approve and reject dao proposals', async () => {});
+    it('2 users should be able to propose, approve and reject dao proposals', async () => {
+      enum Status {
+        Pristine,
+        Pending,
+        Current,
+        Closed,
+      }
+
+      await cryptoAnts.connect(userZero).buyEggs({ value: eggPrice });
+      await cryptoAnts.connect(userOne).buyEggs({ value: eggPrice });
+
+      const zeroProposedPrice = eggPrice.mul(2);
+      await cryptoAnts.connect(userZero).proposeEggPrice(zeroProposedPrice);
+
+      let proposedPrices = await cryptoAnts.getProposalPrices();
+      logger.info(`proposedPrices: ${proposedPrices}`);
+
+      logger.info('Searching...');
+      let proposalId = 0;
+      for (let i = 0; i < proposedPrices.length; i++) {
+        logger.info(`proposedPrices[i]: ${proposedPrices[i]}`);
+        logger.info(`zeroProposedPrice: ${zeroProposedPrice}`);
+
+        logger.info(`(proposedPrices[i] === zeroProposedPrice): ${proposedPrices[i] === zeroProposedPrice}`);
+        if (proposedPrices[i].toString() === zeroProposedPrice.toString()) {
+          logger.info(true);
+          proposalId = i;
+        }
+      }
+      logger.info('Searced...');
+      // user zero approves his proposal
+      await cryptoAnts.connect(userZero).approveProposal(proposalId);
+
+      const proposalPeriod = await cryptoAnts.proposalPeriod();
+      await advanceTimeAndBlock(proposalPeriod.toNumber() + 1);
+
+      // but user one doesn;t approves and the proposal won't pass since the voting power is divided 50/50
+      await cryptoAnts.connect(userZero).executeProposal(proposalId);
+      const eggPriceContract = await cryptoAnts.eggPrice();
+      expect(eggPriceContract).to.be.equal(eggPrice);
+
+      // user one proposed another price
+      const oneProposedPrice = eggPrice.div(2);
+      logger.info(`oneProposedPrice: ${oneProposedPrice}`);
+      await cryptoAnts.connect(userOne).proposeEggPrice(oneProposedPrice);
+
+      proposedPrices = await cryptoAnts.getProposalPrices();
+      logger.info(`proposedPrices: ${proposedPrices}`);
+      logger.info('Searching...');
+      proposalId = 0;
+      for (let i = 0; i < proposedPrices.length; i++) {
+        logger.info(`proposedPrices[i]: ${proposedPrices[i]}`);
+        logger.info(`oneProposedPrice: ${oneProposedPrice}`);
+
+        logger.info(`(proposedPrices[i] === oneProposedPrice): ${proposedPrices[i] === oneProposedPrice}`);
+        if (proposedPrices[i].toString() === oneProposedPrice.toString()) {
+          logger.info(true);
+          proposalId = i;
+        }
+      }
+      logger.info('Searched...');
+      logger.info(`proposalId: ${proposalId}`);
+
+      // and both users approve it
+      await cryptoAnts.connect(userZero).approveProposal(proposalId);
+      logger.info(0);
+      await cryptoAnts.connect(userOne).approveProposal(proposalId);
+      logger.info(1);
+
+      await advanceTimeAndBlock(proposalPeriod.toNumber() + 1);
+      // so price should be updated since proposal is totally aproved
+      logger.info(2);
+      await cryptoAnts.connect(userZero).executeProposal(proposalId);
+      logger.info(3);
+
+      const newEggPrice = await cryptoAnts.eggPrice();
+      const [, , proposalStatus] = await cryptoAnts.getProposalInfo(proposalId);
+
+      expect(newEggPrice).to.be.equal(oneProposedPrice);
+      expect(proposalStatus).to.be.equal(Status.Current);
+    });
   });
 });
