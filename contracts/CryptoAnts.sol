@@ -154,8 +154,8 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   ) internal override {
     console.log('fulfillRandomWords');
 
-    // transform the random number to a number between 1 and 50 inclusively
-    uint256 normalizedRandom = (randomNumbers[0] % 50) + 1;
+    // transform the random number to a number between 1 and 30 inclusively
+    uint256 normalizedRandom = (randomNumbers[0] % 30) + 1;
     _layEggs(normalizedRandom);
   }
 
@@ -190,7 +190,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     ownerAnts[antId].eggsCreated += eggsAmount;
 
     bool antDies = _antDies(antId, randomNumber);
-    if (!antDies) ownerAnts[antId].isAlive = false;
+    if (antDies) ownerAnts[antId].isAlive = false;
 
     _lastEggLayed = _layEggQueue.length;
 
@@ -206,6 +206,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     antDies = false;
 
     // by this way, there is a random part (1, 30) but another part that is based in how many eggs the ant has created
+    console.log('math', (randomNumber * (eggsCreated / 2) > ANT_HEALTH));
     if (randomNumber * (eggsCreated / 2) > ANT_HEALTH) {
       antDies = true;
     }
