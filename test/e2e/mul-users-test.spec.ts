@@ -139,9 +139,91 @@ describe('CryptoAnts-Multiple Users', function () {
       expect(txOne).to.emit(cryptoAnts, 'AntSold()');
     });
 
-    it('2 users should have 50 eggs starting with only 1', async () => {});
+    it('both users should have 100 eggs starting with only 1 initial egg', async () => {
+      const oneHundred = BigNumber.from(100);
+      const layEggsPeriod = await cryptoAnts.MIN_LAY_PERIOD();
+      let zeroAntsBalance = await cryptoAnts.balanceOf(userZero.address);
+      let oneAntsBalance = await cryptoAnts.balanceOf(userOne.address);
 
-    it('should update the ant state correctly after an ant trasnfer between users', async () => {});
+      // buy an egg
+      await cryptoAnts.connect(userZero).buyEggs({ value: eggPrice });
+      await cryptoAnts.connect(userOne).buyEggs({ value: eggPrice });
+
+      let i;
+      for (i = 0; zeroAntsBalance.lt(100) && oneAntsBalance.lt(100); i++) {
+        logger.info(`i: ${i}`);
+        // create ant
+        await cryptoAnts.connect(userZero).createAnt();
+        await cryptoAnts.connect(userOne).createAnt();
+
+        // get last ant id of user zero
+        const zeroUserAntsId = await cryptoAnts.getOwnerAntIds(userZero.address);
+        const zeroAntId = zeroUserAntsId[zeroUserAntsId.length - 1]; // always gets the  last for assuring is not dead
+
+        /// lay egg from ant of user zero
+        let tx = await cryptoAnts.connect(userZero).layEggs(zeroAntId);
+        let txReceipt = await tx.wait();
+
+        // request randomness
+        if (!txReceipt.events || !txReceipt.events[1].args) {
+          throw new Error('Bad reading of events');
+        }
+        let requestId = txReceipt.events[1].args.requestId;
+        await vrfCoordinatorV2Mock.fulfillRandomWords(requestId, cryptoAnts.address);
+
+        // get last ant id of user one
+        const oneUserAntsId = await cryptoAnts.getOwnerAntIds(userOne.address);
+        const oneAntId = oneUserAntsId[oneUserAntsId.length - 1]; // always gets the last for assuring is not dead
+
+        /// lay egg from ant of user one
+        tx = await cryptoAnts.connect(userOne).layEggs(oneAntId);
+        txReceipt = await tx.wait();
+
+        // request randomness
+        if (!txReceipt.events || !txReceipt.events[1].args) {
+          throw new Error('Bad reading of events');
+        }
+        requestId = txReceipt.events[1].args.requestId;
+        await vrfCoordinatorV2Mock.fulfillRandomWords(requestId, cryptoAnts.address);
+
+        // advance time period that the ant needs for lay an egg again
+        await advanceTimeAndBlock(layEggsPeriod.toNumber() + 1);
+
+        zeroAntsBalance = await cryptoAnts.balanceOf(userZero.address);
+        oneAntsBalance = await cryptoAnts.balanceOf(userOne.address);
+      }
+
+      const zeroAntsBalanceAf = await cryptoAnts.balanceOf(userZero.address);
+      const oneAntsBalanceAf = await cryptoAnts.balanceOf(userOne.address);
+
+      expect(zeroAntsBalanceAf).to.be.equal(oneHundred);
+      expect(oneAntsBalanceAf).to.be.equal(oneHundred);
+    });
+
+    it('should update the ant state correctly after an ant trasnfer between users', async () => {
+      await cryptoAnts.connect(userZero).buyEggs({ value: eggPrice });
+
+      await cryptoAnts.connect(userZero).createAnt();
+      const [antId] = await cryptoAnts.getOwnerAntIds(userZero.address);
+
+      const tx = await cryptoAnts.connect(userZero).transferFrom(userZero.address, userOne.address, antId);
+
+      const [userZeroId] = await cryptoAnts.getOwnerAntIds(userZero.address);
+      logger.info(`userZeroId: ${userZeroId}`);
+
+      const userOneIds = await cryptoAnts.getOwnerAntIds(userOne.address);
+      logger.info(`userOneIds: ${userOneIds}`);
+
+      const [antOwner, antIdx] = await cryptoAnts.getAntInfo(antId);
+      logger.info(`[antOwner, antIdx]: ${[antOwner, antIdx]}`);
+
+      expect(tx).to.changeTokenBalance(cryptoAnts, userOne, 77);
+      expect(userZeroId).to.be.equal(0);
+      expect(userOneIds.length).to.be.equal(1);
+      expect(userOneIds[0]).to.be.equal(antId);
+      expect(antOwner).to.be.equal(userOne.address);
+      expect(antIdx).to.be.equal(0);
+    });
 
     it('2 users should be able to propose, approve and reject dao proposals', async () => {});
   });
