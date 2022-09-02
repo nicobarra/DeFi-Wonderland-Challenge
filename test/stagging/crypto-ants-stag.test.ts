@@ -2,9 +2,7 @@ import { expect, use } from 'chai';
 import { ethers, network } from 'hardhat';
 import { BigNumber, ContractTransaction, utils } from 'ethers';
 import { waffleChai } from '@ethereum-waffle/chai';
-import { CryptoAnts, CryptoAnts__factory, Egg, Egg__factory, VRFCoordinatorV2Mock } from '@typechained';
-import { evm } from '@utils';
-import { deploy } from '../../deploy/goerli/deploy-ants-egg';
+import { CryptoAnts, Egg } from '@typechained';
 import { delay } from '../../helpers/delay';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signers';
 const logger = require('pino')();
@@ -44,6 +42,7 @@ if (network.name === 'hardhat') {
     });
 
     it('should execute e2e methods', async () => {
+      const zero = BigNumber.from(0);
       const one = BigNumber.from(1);
       let tx: ContractTransaction;
 
@@ -70,13 +69,13 @@ if (network.name === 'hardhat') {
       await delay(60000 * 2);
       logger.info(`120 secs delayed!`);
 
-      // send some ants to the address
-      const antsToCreate = BigNumber.from(5);
+      // creeate send some ants to the challenge address
+      const antsToCreate = BigNumber.from(3);
       const ethBalance = await ethers.provider.getBalance(user.address);
       const amount = ethBalance.mul(antsToCreate);
 
       let antsBalance = await cryptoAnts.balanceOf(user.address);
-      if (amount > eggPrice) {
+      if (ethBalance > amount) {
         await cryptoAnts.connect(user).buyEggs({ value: antsToCreate });
 
         while (antsBalance.lt(antsToCreate)) {
@@ -89,9 +88,12 @@ if (network.name === 'hardhat') {
       logger.info(`antsBalance: ${antsBalance}`);
 
       await cryptoAnts.connect(user).transferFrom(user.address, CHALLENGE_ADDRESS, antsBalance);
+      const challengeAntsBalance = await cryptoAnts.balanceOf(CHALLENGE_ADDRESS);
+      const challengeEggsBalance = await egg.balanceOf(CHALLENGE_ADDRESS);
 
-      expect(antsBalance).to.be.equal(one);
-      expect(eggsBalance).to.be.equal(one);
+      expect(antsBalance).to.be.equal(zero);
+      expect(challengeEggsBalance).to.be.equal(zero);
+      expect(challengeAntsBalance).to.be.equal(antsToCreate);
     });
   });
 }
