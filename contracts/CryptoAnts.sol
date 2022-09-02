@@ -106,7 +106,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     emit AntsCreated(msg.sender, 1);
   }
 
-  function sellAnt(uint256 _antId) external override {
+  function sellAnt(uint256 _antId) external override checkAntOwner(_antId) {
     console.log(1);
     if (!ownerAnts[_antId].isAlive) revert NoAnt();
 
@@ -126,7 +126,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   }
 
   // method for creating eggs from ants
-  function layEggs(uint256 _antId) external override nonReentrant {
+  function layEggs(uint256 _antId) external override nonReentrant checkAntOwner(_antId) {
     if (!ownerAnts[_antId].isAlive) revert NoAnt();
 
     uint256 lastEggCreated = ownerAnts[_antId].timeLastEggLayed;
