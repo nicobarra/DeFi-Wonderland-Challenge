@@ -17,11 +17,13 @@ These are the Sequences diagrams that I create in order to show better thw contr
 
 The `CryptoAnts` contract eggs and ants logic:
 
-![CryptoAnts-ants-and-eggs-logic](images/first-diagram.png)
+![first-diagram](https://user-images.githubusercontent.com/71539596/188253430-31efcc66-0569-4c13-b925-ffa6975c68a5.png)
+
 
 The `CryptoAnts` DAO related funcitons and logic:
 
-![CryptoAnts-dao-logic](images/second-diagram.png)
+![second-diagram](https://user-images.githubusercontent.com/71539596/188253419-706db382-713a-458a-9e9b-dad6467d5ac0.png)
+
 
 ### Challenges
 
