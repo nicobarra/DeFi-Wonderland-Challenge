@@ -9,7 +9,6 @@ contract AntsDAO is IAntsDAO {
   // internal variables
   IEgg public eggs;
   uint256 public eggPrice = 0.01 ether;
-  uint256 private _proposalId;
   uint256 public proposalPeriod;
 
   // constants
@@ -19,8 +18,7 @@ contract AntsDAO is IAntsDAO {
   enum Status {
     Pristine,
     Pending,
-    Current,
-    Closed
+    Current
   }
 
   // proposal information
@@ -31,7 +29,7 @@ contract AntsDAO is IAntsDAO {
     uint256 votes;
   }
 
-  /// @dev mapping(proposalId => ProposalInfo)
+  /// @dev mapping(proposalPrices => ProposalInfo)
   mapping(uint256 => ProposalInfo) public proposals;
 
   // This is only for externally know which prices are being proposed easier
@@ -45,35 +43,32 @@ contract AntsDAO is IAntsDAO {
 
   // method for propose a new egg price
   function proposeEggPrice(uint256 proposedPrice) external override enoughEggs {
-    Status proposalStatus = proposals[proposedPrice].status;
     // check the price is not the current one or that the proposal already exists
-    if (proposedPrice == eggPrice || proposalStatus == Status.Pending || proposalStatus == Status.Current) {
+    if (proposedPrice == eggPrice || proposals[proposedPrice].status != Status.Pristine) {
       revert PriceAlreadyExists();
     }
 
     // make proposal ids incremental for assuring they are the same in both data structures
-    proposals[_proposalId] = ProposalInfo(proposedPrice, block.timestamp, Status.Pending, ZERO_EGGS);
+    proposals[proposedPrice] = ProposalInfo(proposedPrice, block.timestamp, Status.Pending, ZERO_EGGS);
     proposedPrices.push(proposedPrice);
-
-    _proposalId += 1;
   }
 
   // method for approving a proposal identified by 'proposalId'
-  function approveProposal(uint256 proposalId) external override enoughEggs {
-    // check the proposal to approve is in 'Pengin' status
-    if (proposals[proposalId].status != Status.Pending) revert ProposalNotFound();
+  function approveProposal(uint256 proposedPrice) external override enoughEggs {
+    // check the proposal to approve is in 'Pending' status
+    if (proposals[proposedPrice].status != Status.Pending) revert ProposalNotFound();
 
     // the proposal would have as many votes as the 'msg.sender' egg balance
-    proposals[proposalId].votes += eggs.balanceOf(msg.sender);
+    proposals[proposedPrice].votes += eggs.balanceOf(msg.sender);
   }
 
   // method for executing proposal
-  function executeProposal(uint256 proposalId) external override {
-    // check the proposal status i s'Pending'
-    if (proposals[proposalId].status != Status.Pending) revert ProposalNotFound();
+  function executeProposal(uint256 proposedPrice) external override {
+    // check the proposal status is 'Pending'
+    if (proposals[proposedPrice].status != Status.Pending) revert ProposalNotFound();
 
     // check the 'proposalPeriod' to vote is already finished
-    if (block.timestamp - proposals[proposalId].timestamp < proposalPeriod) {
+    if (block.timestamp - proposals[proposedPrice].timestamp < proposalPeriod) {
       revert UnfinishedPeriod();
     }
 
@@ -83,18 +78,17 @@ contract AntsDAO is IAntsDAO {
 
     // define contract as false
     bool approved = false;
-    Status status = Status.Closed;
 
     // if the votes are greater than 'approvalsThreshold', update variables and egg price
-    if (proposals[proposalId].votes > approvalsThreshold) {
+    if (proposals[proposedPrice].votes > approvalsThreshold) {
       approved = true;
-      eggPrice = proposals[proposalId].price;
-      status = Status.Current;
+      eggPrice = proposals[proposedPrice].price;
+      proposals[proposedPrice].status = Status.Current;
     }
 
-    // update state
-    proposals[proposalId].status = status;
+    // delete proposal from array
+    delete proposals[proposedPrice];
 
-    emit ExecutedProposal(approved, proposalId);
+    emit ExecutedProposal(approved, proposedPrice);
   }
 }
