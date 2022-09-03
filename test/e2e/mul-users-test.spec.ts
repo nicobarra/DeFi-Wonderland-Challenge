@@ -41,22 +41,20 @@ describe('CryptoAnts-Multiple Users', function () {
       blockNumber: FORK_BLOCK_NUMBER,
     });
 
-    // getting signers with ETH
+    // getting multiple signers with ETH
     [, deployer, userZero, userOne] = await ethers.getSigners();
 
     // deploying VRF V2 Mock contract
     vrfCoordinatorV2Mock = (await deployVRFv2Mock()) as VRFCoordinatorV2Mock;
-    logger.info(`yes: ${await vrfCoordinatorV2Mock.getSubscription(subscriptionId)}`);
 
-    const tx = await vrfCoordinatorV2Mock.connect(userZero).getRequestConfig();
-    logger.info(`tx: ${tx}`);
-
+    // set proposal period for DAO proposals
     const proposalPeriod = 60 * 60 * 24 * 2; // 2 days
 
     // deploying CryptoAnts and Egg contracts
     eggFactory = (await ethers.getContractFactory('Egg')) as Egg__factory;
     egg = await eggFactory.connect(deployer).deploy();
 
+    // get and deploy cryptoAnts contract
     cryptoAntsFactory = (await ethers.getContractFactory('CryptoAnts')) as CryptoAnts__factory;
     cryptoAnts = await cryptoAntsFactory.deploy(
       egg.address,
@@ -67,16 +65,19 @@ describe('CryptoAnts-Multiple Users', function () {
       proposalPeriod
     );
 
+    // transfer ownership off egg from deployer to cryptoAnts contracts
     await egg.transferOwnership(cryptoAnts.address);
 
+    // get egg price
     eggPrice = await cryptoAnts.eggPrice();
 
     // snapshot
     snapshotId = await evm.snapshot.take();
 
+    // get egg owner and egg address from ant contrac
     const eggOwner = await egg.owner();
     const eggFromAntsContract = await cryptoAnts.eggs();
-
+    // assert they are correct
     expect(eggOwner).to.be.equal(cryptoAnts.address);
     expect(eggFromAntsContract).to.be.equal(egg.address);
   });
@@ -87,17 +88,17 @@ describe('CryptoAnts-Multiple Users', function () {
 
   describe('crypto ants e2e with more than one user', () => {
     it('2 users should execute all the functions related to buy/lay/sell ants and eggs correctly', async () => {
+      // buy an egg with both users
       await cryptoAnts.connect(userZero).buyEggs({ value: eggPrice });
       await cryptoAnts.connect(userOne).buyEggs({ value: eggPrice });
 
+      // create an ant with both users
       await cryptoAnts.connect(userZero).createAnt();
       await cryptoAnts.connect(userOne).createAnt();
 
+      // get first ant id of both users id's arrays
       const [zeroUserAntId] = await cryptoAnts.getOwnerAntIds(userZero.address);
       const [oneUserAntId] = await cryptoAnts.getOwnerAntIds(userOne.address);
-
-      logger.info(`zeroUserAntId: ${zeroUserAntId}`);
-      logger.info(`oneUserAntId: ${oneUserAntId}`);
 
       // lay eggs user zero
       let tx = await cryptoAnts.connect(userZero).layEggs(zeroUserAntId);
@@ -121,27 +122,26 @@ describe('CryptoAnts-Multiple Users', function () {
       requestId = txReceipt.events[1].args.requestId;
       await vrfCoordinatorV2Mock.fulfillRandomWords(requestId, cryptoAnts.address);
 
+      // get users info
       let antInfoZero = await cryptoAnts.getAntInfo(zeroUserAntId);
-      logger.info(`antInfo: ${antInfoZero}`);
       let antInfoOne = await cryptoAnts.getAntInfo(oneUserAntId);
-      logger.info(`antInfo: ${antInfoOne}`);
-      logger.info('here');
       const txZero = await cryptoAnts.connect(userZero).sellAnt(zeroUserAntId);
 
-      logger.info('here 2');
       antInfoZero = await cryptoAnts.getAntInfo(zeroUserAntId);
-      logger.info(`antInfo: ${antInfoZero}`);
       antInfoOne = await cryptoAnts.getAntInfo(oneUserAntId);
-      logger.info(`antInfo: ${antInfoOne}`);
       const txOne = await cryptoAnts.connect(userOne).sellAnt(oneUserAntId);
 
+      // if the events are emitted, all is ok
       expect(txZero).to.emit(cryptoAnts, 'AntSold()');
       expect(txOne).to.emit(cryptoAnts, 'AntSold()');
     });
 
     it('both users should have 100 eggs starting with only 1 initial egg', async () => {
+      // define variables
       const oneHundred = BigNumber.from(100);
       const layEggsPeriod = await cryptoAnts.MIN_LAY_PERIOD();
+
+      // get ants balances
       let zeroAntsBalance = await cryptoAnts.balanceOf(userZero.address);
       let oneAntsBalance = await cryptoAnts.balanceOf(userOne.address);
 
@@ -193,31 +193,34 @@ describe('CryptoAnts-Multiple Users', function () {
         oneAntsBalance = await cryptoAnts.balanceOf(userOne.address);
       }
 
+      // get balances after
       const zeroAntsBalanceAf = await cryptoAnts.balanceOf(userZero.address);
       const oneAntsBalanceAf = await cryptoAnts.balanceOf(userOne.address);
 
+      // make assertions
       expect(zeroAntsBalanceAf).to.be.equal(oneHundred);
       expect(oneAntsBalanceAf).to.be.equal(oneHundred);
     });
 
     it('should update the ant state correctly after an ant trasnfer between users', async () => {
+      // buy egg
       await cryptoAnts.connect(userZero).buyEggs({ value: eggPrice });
 
+      // create ant
       await cryptoAnts.connect(userZero).createAnt();
       const [antId] = await cryptoAnts.getOwnerAntIds(userZero.address);
 
+      // transfer ant by its ant id
       const tx = await cryptoAnts.connect(userZero).transferFrom(userZero.address, userOne.address, antId);
 
+      // get users info
       const [userZeroId] = await cryptoAnts.getOwnerAntIds(userZero.address);
-      logger.info(`userZeroId: ${userZeroId}`);
 
       const userOneIds = await cryptoAnts.getOwnerAntIds(userOne.address);
-      logger.info(`userOneIds: ${userOneIds}`);
 
       const [antOwner, antIdx] = await cryptoAnts.getAntInfo(antId);
-      logger.info(`[antOwner, antIdx]: ${[antOwner, antIdx]}`);
 
-      expect(tx).to.changeTokenBalance(cryptoAnts, userOne, 77);
+      // make assertions checking the state is correctly updated
       expect(userZeroId).to.be.equal(0);
       expect(userOneIds.length).to.be.equal(1);
       expect(userOneIds[0]).to.be.equal(antId);
@@ -226,85 +229,68 @@ describe('CryptoAnts-Multiple Users', function () {
     });
 
     it('2 users should be able to propose, approve and reject dao proposals', async () => {
+      // define proposal status enum
       enum Status {
         Pristine,
         Pending,
         Current,
-        Closed,
       }
 
+      // buy an egg from 2 users
       await cryptoAnts.connect(userZero).buyEggs({ value: eggPrice });
       await cryptoAnts.connect(userOne).buyEggs({ value: eggPrice });
 
+      // propose new price user zero
       const zeroProposedPrice = eggPrice.mul(2);
       await cryptoAnts.connect(userZero).proposeEggPrice(zeroProposedPrice);
 
+      // get proposed prices array
       let proposedPrices = await cryptoAnts.getProposalPrices();
-      logger.info(`proposedPrices: ${proposedPrices}`);
 
-      logger.info('Searching...');
-      let proposalId = 0;
-      for (let i = 0; i < proposedPrices.length; i++) {
-        logger.info(`proposedPrices[i]: ${proposedPrices[i]}`);
-        logger.info(`zeroProposedPrice: ${zeroProposedPrice}`);
+      // get last price proposed from the array
+      let proposalPrice = proposedPrices[proposedPrices.length - 1];
 
-        logger.info(`(proposedPrices[i] === zeroProposedPrice): ${proposedPrices[i] === zeroProposedPrice}`);
-        if (proposedPrices[i].toString() === zeroProposedPrice.toString()) {
-          logger.info(true);
-          proposalId = i;
-        }
-      }
-      logger.info('Searced...');
       // user zero approves his proposal
-      await cryptoAnts.connect(userZero).approveProposal(proposalId);
+      await cryptoAnts.connect(userZero).approveProposal(proposalPrice);
 
+      // advance time for finishing the proposal period
       const proposalPeriod = await cryptoAnts.proposalPeriod();
       await advanceTimeAndBlock(proposalPeriod.toNumber() + 1);
 
-      // but user one doesn;t approves and the proposal won't pass since the voting power is divided 50/50
-      await cryptoAnts.connect(userZero).executeProposal(proposalId);
+      // but user one doesn't approves, so the proposal won't pass since the voting power is divided 50/50 between them
+      await cryptoAnts.connect(userZero).executeProposal(proposalPrice);
+
+      // price should be the same since nothing changed
       const eggPriceContract = await cryptoAnts.eggPrice();
       expect(eggPriceContract).to.be.equal(eggPrice);
 
       // user one proposed another price
       const oneProposedPrice = eggPrice.div(2);
-      logger.info(`oneProposedPrice: ${oneProposedPrice}`);
       await cryptoAnts.connect(userOne).proposeEggPrice(oneProposedPrice);
 
+      // get proposed prices array
       proposedPrices = await cryptoAnts.getProposalPrices();
-      logger.info(`proposedPrices: ${proposedPrices}`);
-      logger.info('Searching...');
-      proposalId = 0;
-      for (let i = 0; i < proposedPrices.length; i++) {
-        logger.info(`proposedPrices[i]: ${proposedPrices[i]}`);
-        logger.info(`oneProposedPrice: ${oneProposedPrice}`);
 
-        logger.info(`(proposedPrices[i] === oneProposedPrice): ${proposedPrices[i] === oneProposedPrice}`);
-        if (proposedPrices[i].toString() === oneProposedPrice.toString()) {
-          logger.info(true);
-          proposalId = i;
-        }
-      }
-      logger.info('Searched...');
-      logger.info(`proposalId: ${proposalId}`);
+      // find proposed price idx in the proposed prices array
+      proposalPrice = proposedPrices[proposedPrices.length - 1];
 
       // and both users approve it
-      await cryptoAnts.connect(userZero).approveProposal(proposalId);
-      logger.info(0);
-      await cryptoAnts.connect(userOne).approveProposal(proposalId);
-      logger.info(1);
+      await cryptoAnts.connect(userZero).approveProposal(proposalPrice);
+      await cryptoAnts.connect(userOne).approveProposal(proposalPrice);
 
+      // advance time for finishing the proposal period
       await advanceTimeAndBlock(proposalPeriod.toNumber() + 1);
-      // so price should be updated since proposal is totally aproved
-      logger.info(2);
-      await cryptoAnts.connect(userZero).executeProposal(proposalId);
-      logger.info(3);
 
+      // execute proposal, price should be updated since proposal is totally aproved
+      await cryptoAnts.connect(userZero).executeProposal(proposalPrice);
+
+      // get new price and proposal info
       const newEggPrice = await cryptoAnts.eggPrice();
-      const [, , proposalStatus] = await cryptoAnts.getProposalInfo(proposalId);
+      const [, , proposalStatus] = await cryptoAnts.getProposalInfo(proposalPrice);
 
+      // make assertions
       expect(newEggPrice).to.be.equal(oneProposedPrice);
-      expect(proposalStatus).to.be.equal(Status.Current);
+      expect(proposalStatus).to.be.equal(Status.Pristine);
     });
   });
 });
