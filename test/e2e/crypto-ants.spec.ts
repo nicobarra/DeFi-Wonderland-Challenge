@@ -1,10 +1,9 @@
 import { expect, use } from 'chai';
 import { ethers } from 'hardhat';
-import { BigNumber, utils } from 'ethers';
+import { BigNumber } from 'ethers';
 import { waffleChai } from '@ethereum-waffle/chai';
 import { CryptoAnts, CryptoAnts__factory, Egg, Egg__factory, VRFCoordinatorV2Mock } from '@typechained';
 import { evm } from '@utils';
-import { delay } from '../../helpers/delay';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signers';
 import { deployVRFv2Mock, KEY_HASH, CALLBACK_GAS_LIMIT, subscriptionId } from '../utils/vrf-mock';
 import { advanceTimeAndBlock } from '@utils/evm';
@@ -47,15 +46,14 @@ describe('CryptoAnts', function () {
     vrfCoordinatorV2Mock = (await deployVRFv2Mock()) as VRFCoordinatorV2Mock;
     logger.info(`yes: ${await vrfCoordinatorV2Mock.getSubscription(subscriptionId)}`);
 
-    const tx = await vrfCoordinatorV2Mock.connect(randomUser).getRequestConfig();
-    logger.info(`tx: ${tx}`);
-
+    // define proposal period for DAO proposals
     const proposalPeriod = 60 * 60 * 24 * 2; // 2 days
 
     // deploying CryptoAnts and Egg contracts
     eggFactory = (await ethers.getContractFactory('Egg')) as Egg__factory;
     egg = await eggFactory.connect(deployer).deploy();
 
+    // get and deploy CryptoAnts contract
     cryptoAntsFactory = (await ethers.getContractFactory('CryptoAnts')) as CryptoAnts__factory;
     cryptoAnts = await cryptoAntsFactory.deploy(
       egg.address,
@@ -66,94 +64,119 @@ describe('CryptoAnts', function () {
       proposalPeriod
     );
 
+    // transfer ownership off egg from deployer to cryptoAnts contracts
     await egg.transferOwnership(cryptoAnts.address);
 
+    // get egg price
     eggPrice = await cryptoAnts.eggPrice();
 
     // snapshot
     snapshotId = await evm.snapshot.take();
 
+    // get egg owner and egg address from ant contrac
     const eggOwner = await egg.owner();
     const eggFromAntsContract = await cryptoAnts.eggs();
-
+    // assert they are correct
     expect(eggOwner).to.be.equal(cryptoAnts.address);
     expect(eggFromAntsContract).to.be.equal(egg.address);
   });
 
   beforeEach(async () => {
+    // for reverting the block state before any test
     await evm.snapshot.revert(snapshotId);
   });
 
+  /**  @notice
+   * chai matchers for token or ether balance changes were not implemented since they do not work correctly
+   * 'calledOn' matchers were not implemented since the provider does not support
+   */
+
   describe('Robert e2e test proposed', () => {
     it('should only allow the CryptoAnts contract to mint eggs', async () => {
+      // buy an egg (cryptoAnts contract executes mint method in egg contract)
       const antTx = await cryptoAnts.connect(randomUser).buyEggs({ value: eggPrice });
 
       // if emits the event, the tx was successful
       expect(antTx).to.emit(cryptoAnts, 'EggsBought');
-      // I didn't implemented 'calledOn' matchers because provider doesn;t support call history
 
+      // assert executing directly egg from user fails
       await expect(egg.connect(randomUser).mint(randomUser.address, eggPrice)).to.be.revertedWith('Ownable: caller is not the owner');
     });
 
     it('should buy an egg and create a new ant with it', async () => {
-      await cryptoAnts.connect(randomUser).buyEggs({ value: eggPrice });
       const one = BigNumber.from(1);
+
+      // buy an egg
+      await cryptoAnts.connect(randomUser).buyEggs({ value: eggPrice });
       const antsBalanceBef = await cryptoAnts.balanceOf(randomUser.address);
 
-      const antTx = await cryptoAnts.connect(randomUser).createAnt();
+      // create an ant
+      await cryptoAnts.connect(randomUser).createAnt();
       const antsBalanceAf = await cryptoAnts.balanceOf(randomUser.address);
 
+      // assert the balances were updated correctly
       expect(antsBalanceAf.sub(antsBalanceBef)).to.be.equal(one);
-      // I didn't use this method because is bad. For example, this assertion would pass
-      // expect(antTx).to.changeTokenBalance(cryptoAnts, randomUser, 7);
     });
 
     it('should send funds to the user who sells an ant', async () => {
+      // buy an egg
       await cryptoAnts.connect(randomUser).buyEggs({ value: eggPrice });
 
+      // create an ant
       await cryptoAnts.connect(randomUser).createAnt();
-      const userAntsIds = await cryptoAnts.getOwnerAntIds(randomUser.address);
+      // get first user ant id from array
+      const [userAntId] = await cryptoAnts.getOwnerAntIds(randomUser.address);
 
+      // get user gas balance
       const userEthBalanceBef = await ethers.provider.getBalance(randomUser.address);
       logger.info(`userEthBalanceBef: ${userEthBalanceBef}`);
 
-      const sellTx = await cryptoAnts.connect(randomUser).sellAnt(userAntsIds[0]);
+      // sell an ant
+      const sellTx = await cryptoAnts.connect(randomUser).sellAnt(userAntId);
       const receiptTx = await sellTx.wait();
 
+      // get gas used for post calculations
       const gasUsed = receiptTx.gasUsed;
       logger.info(`gasUsed: ${gasUsed}`);
 
+      // get user gas balance before executing all tx's
       const userEthBalanceAf = await ethers.provider.getBalance(randomUser.address);
       logger.info(`userEthBalanceAf : ${userEthBalanceAf}`);
-      const antsBalanceAf = await cryptoAnts.balanceOf(randomUser.address);
 
+      // assert the user received the ETH amount for the sold ant
       expect(userEthBalanceAf.add(gasUsed)).to.be.gt(userEthBalanceBef);
-      // expect(sellTx).to.changeEtherBalance(randomUser, antsPrice);
     });
 
     it('should burn the ant after the user sells it', async () => {
+      // define variables
       const zero = BigNumber.from(0);
 
+      // buy an egg
       await cryptoAnts.connect(randomUser).buyEggs({ value: eggPrice });
 
+      // create an ant
       await cryptoAnts.connect(randomUser).createAnt();
+      // get first user ant id from array
+      const [userAntId] = await cryptoAnts.getOwnerAntIds(randomUser.address);
 
-      const [userAntsId] = await cryptoAnts.getOwnerAntIds(randomUser.address);
-
+      // get user gas balance
       const userEthBalanceBef = await ethers.provider.getBalance(randomUser.address);
       logger.info(`userEthBalanceBef: ${userEthBalanceBef}`);
 
-      const sellTx = await cryptoAnts.connect(randomUser).sellAnt(userAntsId);
+      // sell ant
+      const sellTx = await cryptoAnts.connect(randomUser).sellAnt(userAntId);
       const receiptTx = await sellTx.wait();
 
+      // get gas used
       const gasUsed = receiptTx.gasUsed;
       logger.info(`gasUsed: ${gasUsed}`);
 
+      // get gas balance after executing all tx's
       const userEthBalanceAf = await ethers.provider.getBalance(randomUser.address);
       logger.info(`userEthBalanceAf : ${userEthBalanceAf}`);
       const antsBalanceAf = await cryptoAnts.balanceOf(randomUser.address);
-
-      const [, , antIsAlive] = await cryptoAnts.getAntInfo(userAntsId);
+      // get ant is alive info (should be zero since doesn't exist anymore)
+      const [, , antIsAlive] = await cryptoAnts.getAntInfo(userAntId);
 
       expect(antsBalanceAf).to.be.equal(zero);
       expect(antIsAlive).to.be.false;
@@ -163,6 +186,7 @@ describe('CryptoAnts', function () {
     Hint: you may need advanceTimeAndBlock (from utils) to handle the egg creation cooldown
   */
     it('should be able to create a 100 ants with only one initial egg', async () => {
+      // define variables
       const oneHundred = BigNumber.from(100);
       const layEggsPeriod = await cryptoAnts.MIN_LAY_PERIOD();
       let antsBalance = await cryptoAnts.balanceOf(randomUser.address);
@@ -170,6 +194,7 @@ describe('CryptoAnts', function () {
       // buy an egg
       await cryptoAnts.connect(randomUser).buyEggs({ value: eggPrice });
 
+      // start loop for getting 100 ants from the egg bought
       let i;
       for (i = 0; antsBalance.lt(100); i++) {
         logger.info(i);
@@ -178,30 +203,29 @@ describe('CryptoAnts', function () {
 
         // get last ant id
         const userAntsId = await cryptoAnts.getOwnerAntIds(randomUser.address);
-        logger.info(`userAntsId: ${userAntsId}`);
         const antId = userAntsId[userAntsId.length - 1]; // always gets the last for assuring is not dead
-        logger.info(`antId: ${antId}`);
+
         // lay egg from ant
         const tx = await cryptoAnts.connect(randomUser).layEggs(antId);
         const txReceipt = await tx.wait();
 
+        // get request id for VRF exec
         if (!txReceipt.events || !txReceipt.events[1].args) {
           throw new Error('Bad reading of events');
         }
-
         const requestId = txReceipt.events[1].args.requestId;
+        // mock VRF for randomness with the requestId
         await vrfCoordinatorV2Mock.fulfillRandomWords(requestId, cryptoAnts.address);
 
+        // update ants balance
         antsBalance = await cryptoAnts.balanceOf(randomUser.address);
-        logger.info(`antsBalance: ${antsBalance}`);
-        logger.info(`eggsBalance: ${await egg.balanceOf(randomUser.address)}`);
 
         // advance time period that the ant needs for lay an egg again
         await advanceTimeAndBlock(layEggsPeriod.toNumber() + 1);
       }
 
-      const antsBalanceAf = await cryptoAnts.balanceOf(randomUser.address);
-      expect(antsBalanceAf).to.be.equal(oneHundred);
+      // expect ants balance to be one hundred
+      expect(antsBalance).to.be.equal(oneHundred);
     });
   });
 });
