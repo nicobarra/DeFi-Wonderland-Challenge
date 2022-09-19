@@ -9,7 +9,7 @@ import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 interface ICryptoAnts is IERC721 {
   /* events */
   /// @dev Emitted when an egg is minted to 'owner' for some ETH 'amount'
-  event EggsBought(address indexed owner, uint256 amount);
+  event EggsBought(address indexed owner, uint256 amount, uint256 refundAmount);
 
   /// @dev Emitted when an ERC721 ant with its 'antId' is minted to 'owner' for some ETH amount
   event AntsCreated(address indexed owner, uint256 antId);
