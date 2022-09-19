@@ -25,7 +25,6 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
 
   // internal variables
   uint256 private _antIdsCounter;
-  uint256 private _lastEggLayed;
 
   // VRF V2 (randomness) variables
   VRFCoordinatorV2Interface private immutable _vrfCoordinator;
@@ -38,7 +37,12 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   // only for have a recording
   uint256 public antsAlive = 0;
 
-  // ant info struct
+  // this is for having an incremental recording state in the layEggs() func queue
+  uint256 private _queueIdx = 0;
+
+  // this is for having an incremental recording state in the _layEggs() func queue
+  uint256 private _queueCounter = 0;
+
   struct Ant {
     address owner; // ant owner
     uint256 ownerCounter; // position of ant in the 'ownerIds' array
@@ -47,14 +51,12 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     uint256 timeLastEggLayed; // timestamp of the last egg layed
   }
 
-  /// @notice necessary for _layEgg func execution, since this contract doesn't
-  /// executes this function directly, and is the random VRF which does.
-  /// By managing this state is possible to exec logic correctly when the randomness arrives
-  uint256[] private _layEggQueue;
-
   // ant info mapping by antId
   /// @dev mapping(antId => Ant)
   mapping(uint256 => Ant) public antsInfo;
+
+  /// @dev mapping(queueCounter => antId);
+  mapping(uint256 => uint256) private _layEggQueue;
 
   // owner address antId's recording, so is easier to get this info externally
   /// @dev mapping(owner => antId[]))
@@ -144,12 +146,14 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     }
 
     /// @notice here I managed this info by states, since this contract does not executes '_layEggs' func directly but the VRF
-    /// is which does it when it sends the randomness. So is necessary execute logic with correct information
-    // push ant to create eggs after receiving the randomness
-    _layEggQueue.push(_antId);
+    /// is which does it when it sends the randomness. So I implemented 2 incremental states on both 'layEggs()' and '_layEggs()' funcs
+    _layEggQueue[_queueIdx] = _antId;
+    _queueIdx += 1;
+
     // request randomness to the VRF
     uint256 requestId = _vrfCoordinator.requestRandomWords(_keyHash, _subscriptionId, REQUEST_CONFIRMATIONS, _callbackGasLimit, NUM_NUMBERS);
 
+    // only for testing purposes (necessary in the mock)
     emit RandomnessRequested(requestId);
   }
 
@@ -169,7 +173,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   // method with the logic for execute the creating and checking if the ant dies based on the randomness
   function _layEggs(uint256 randomNumber) internal {
     // get the older antId in the queue for lay an egg
-    uint256 antId = _layEggQueue[_lastEggLayed];
+    uint256 antId = _layEggQueue[_queueCounter];
 
     // calc eggs amount and update this info
     uint256 eggsAmount = _calcEggsCreation(randomNumber);
@@ -180,8 +184,10 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     bool antDies = _antDies(antId, randomNumber);
     if (antDies) antsInfo[antId].isAlive = false;
 
-    // update the queue index for the next time this func has to execute the logic
-    _lastEggLayed = _layEggQueue.length;
+    // update the queue index for the next time this func has to execute the logic it will respect the
+    // correct order (the first which execute will lay first the egg/eggs)
+    delete _layEggQueue[_queueCounter];
+    _queueCounter += 1;
 
     // mint the eggs amount to the ant owner
     eggs.mint(antsInfo[antId].owner, eggsAmount);
