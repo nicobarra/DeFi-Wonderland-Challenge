@@ -228,4 +228,49 @@ describe('CryptoAnts', function () {
       expect(antsBalance).to.be.equal(oneHundred);
     });
   });
+
+  describe('Dust Collector and receive(() func', () => {
+    it('should return the surplus ETH when buying an egg with more quantity than what costs', async () => {
+      const surplus = eggPrice.div(2);
+      const investAmount = eggPrice.add(surplus);
+      const eggQuant = investAmount.div(eggPrice);
+
+      // buy an egg with a surplus in value
+      await expect(cryptoAnts.connect(randomUser).buyEggs({ value: investAmount }))
+        .to.emit(cryptoAnts, 'EggsBought')
+        .withArgs(`${randomUser.address}`, `${eggQuant}`, `${surplus}`);
+    });
+
+    it('should execute the logic correctly with receive() func when sending ETH', async () => {
+      const zero = BigNumber.from(0);
+      const investAmount = eggPrice;
+      const eggQuant = investAmount.div(eggPrice);
+
+      // buy an egg with a sur
+      await expect(
+        randomUser.sendTransaction({
+          value: eggPrice,
+          to: cryptoAnts.address,
+        })
+      )
+        .to.emit(cryptoAnts, 'EggsBought')
+        .withArgs(`${randomUser.address}`, `${eggQuant}`, `${zero}`);
+    });
+  });
+
+  it('should return the surplus ETH when buying an egg through receive() func', async () => {
+    const surplus = eggPrice.div(2);
+    const investAmount = eggPrice.add(surplus);
+    const eggQuant = investAmount.div(eggPrice);
+
+    // buy an egg with a surplus in value
+    await expect(
+      randomUser.sendTransaction({
+        value: investAmount,
+        to: cryptoAnts.address,
+      })
+    )
+      .to.emit(cryptoAnts, 'EggsBought')
+      .withArgs(`${randomUser.address}`, `${eggQuant}`, `${surplus}`);
+  });
 });
