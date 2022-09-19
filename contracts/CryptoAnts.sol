@@ -102,7 +102,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
 
     // mint 'eggsSenderCanBuy' to 'msg.sender'
     eggs.mint(msg.sender, eggsSenderCanBuy);
-    emit EggsBought(msg.sender, eggsSenderCanBuy);
+    emit EggsBought(msg.sender, eggsSenderCanBuy, refundAmm);
   }
 
   // this function keeps the ants created by sender incremental
