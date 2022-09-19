@@ -292,5 +292,61 @@ describe('CryptoAnts-Multiple Users', function () {
       expect(newEggPrice).to.be.equal(oneProposedPrice);
       expect(proposalStatus).to.be.equal(Status.Pristine);
     });
+
+    it('should lay 2 eggs correctly when the 2 request were executed before the first randomness exec', async () => {
+      const one = BigNumber.from(1);
+
+      // buy an egg with both users
+      await cryptoAnts.connect(userZero).buyEggs({ value: eggPrice });
+      await cryptoAnts.connect(userOne).buyEggs({ value: eggPrice });
+
+      // create an ant with both users
+      await cryptoAnts.connect(userZero).createAnt();
+      await cryptoAnts.connect(userOne).createAnt();
+
+      // get first ant id of both users id's arrays
+      const [zeroUserAntId] = await cryptoAnts.getOwnerAntIds(userZero.address);
+      const [oneUserAntId] = await cryptoAnts.getOwnerAntIds(userOne.address);
+
+      // lay eggs user zero
+      let tx = await cryptoAnts.connect(userZero).layEggs(zeroUserAntId);
+      const txReceiptZero = await tx.wait();
+
+      // lay eggs user one
+      tx = await cryptoAnts.connect(userOne).layEggs(oneUserAntId);
+      const txReceiptOne = await tx.wait();
+
+      // we execute the mock randomness
+      if (!txReceiptZero.events || !txReceiptZero.events[1].args) {
+        throw new Error('Bad reading of events');
+      }
+      let requestId = txReceiptZero.events[1].args.requestId;
+      await vrfCoordinatorV2Mock.fulfillRandomWords(requestId, cryptoAnts.address);
+
+      // we execute the mock randomness
+      if (!txReceiptOne.events || !txReceiptOne.events[1].args) {
+        throw new Error('Bad reading of events');
+      }
+      requestId = txReceiptOne.events[1].args.requestId;
+      await vrfCoordinatorV2Mock.fulfillRandomWords(requestId, cryptoAnts.address);
+
+      const eggsUserZero = await egg.balanceOf(userZero.address);
+      const eggsUserOne = await egg.balanceOf(userOne.address);
+
+      logger.info('aa');
+      expect(eggsUserZero).to.be.gte(one);
+      logger.info('bb');
+      expect(eggsUserOne).to.be.gte(one);
+      logger.info('cc');
+
+      // get users info
+      // let antInfoZero = await cryptoAnts.getAntInfo(zeroUserAntId);
+      // let antInfoOne = await cryptoAnts.getAntInfo(oneUserAntId);
+      // const txZero = await cryptoAnts.connect(userZero).sellAnt(zeroUserAntId);
+
+      // antInfoZero = await cryptoAnts.getAntInfo(zeroUserAntId);
+      // antInfoOne = await cryptoAnts.getAntInfo(oneUserAntId);
+      // const txOne = await cryptoAnts.connect(userOne).sellAnt(oneUserAntId);
+    });
   });
 });
