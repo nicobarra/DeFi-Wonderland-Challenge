@@ -33,7 +33,7 @@ contract AntsDAO is IAntsDAO {
   mapping(uint256 => ProposalInfo) private _proposals;
 
   // This is only for externally know which prices are being proposed easier
-  uint256[] public proposedPrices;
+  uint256[] private _proposedPrices;
 
   // modifier that checks 'msg.sender' egg balance is at least one
   modifier enoughEggs() {
@@ -50,7 +50,7 @@ contract AntsDAO is IAntsDAO {
 
     // make proposal ids incremental for assuring they are the same in both data structures
     _proposals[proposedPrice] = ProposalInfo(proposedPrice, block.timestamp, Status.Pending, ZERO_EGGS);
-    proposedPrices.push(proposedPrice);
+    _proposedPrices.push(proposedPrice);
   }
 
   // method for approving a proposal identified by 'proposalId'
@@ -95,5 +95,9 @@ contract AntsDAO is IAntsDAO {
   // method for get a proposal info
   function getProposalInfo(uint256 proposedPrice) external view returns (ProposalInfo memory) {
     return _proposals[proposedPrice];
+  }
+
+  function getProposalPrices() external view returns (uint256[] memory) {
+    return _proposedPrices;
   }
 }
