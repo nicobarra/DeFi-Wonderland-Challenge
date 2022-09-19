@@ -45,7 +45,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
 
   struct Ant {
     address owner; // ant owner
-    uint256 ownerCounter; // position of ant in the 'ownerIds' array
+    uint256 ownerCounter; // position of ant in the '_ownerIds' array
     bool isAlive; // needed for assertion in sellAnt
     uint256 eggsCreated; // eggs that the ant layed
     uint256 timeLastEggLayed; // timestamp of the last egg layed
@@ -53,18 +53,18 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
 
   // ant info mapping by antId
   /// @dev mapping(antId => Ant)
-  mapping(uint256 => Ant) public antsInfo;
+  mapping(uint256 => Ant) private _antsInfo;
 
   /// @dev mapping(queueCounter => antId);
   mapping(uint256 => uint256) private _layEggQueue;
 
   // owner address antId's recording, so is easier to get this info externally
   /// @dev mapping(owner => antId[]))
-  mapping(address => uint256[]) public ownerIds;
+  mapping(address => uint256[]) private _ownerIds;
 
   // modifier that chheck the 'msg.sender' is the 'ant.owner'
   modifier checkAntOwner(uint256 antId) {
-    if (antsInfo[antId].owner != msg.sender) revert NotAntOwner();
+    if (_antsInfo[antId].owner != msg.sender) revert NotAntOwner();
     _;
   }
 
@@ -103,11 +103,11 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     // this is for keep the ant ids incremental
     _antIdsCounter += 1;
 
-    /// @notice since the antId in 'ownerIds' array is saved in 'antsInfo', is possible to link this both data structure.
+    /// @notice since the antId in '_ownerIds' array is saved in '_antsInfo', is possible to link this both data structure.
     /// is length because after pushing a value to the array that is the correct index
-    uint256 antIdx = ownerIds[msg.sender].length;
-    antsInfo[_antIdsCounter] = Ant(msg.sender, antIdx, ANT_IS_ALIVE, ZERO_EGGS, ANT_RECENTLY_CREATED);
-    ownerIds[msg.sender].push(_antIdsCounter);
+    uint256 antIdx = _ownerIds[msg.sender].length;
+    _antsInfo[_antIdsCounter] = Ant(msg.sender, antIdx, ANT_IS_ALIVE, ZERO_EGGS, ANT_RECENTLY_CREATED);
+    _ownerIds[msg.sender].push(_antIdsCounter);
 
     _createAnts(_antIdsCounter);
     emit AntsCreated(msg.sender, _antIdsCounter);
@@ -116,15 +116,15 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   // method for selling ant from 'msg.sender' passing the 'antId'
   function sellAnt(uint256 _antId) external override checkAntOwner(_antId) {
     // check the ant exists and is alive
-    if (!antsInfo[_antId].isAlive) revert NoAnt();
+    if (!_antsInfo[_antId].isAlive) revert NoAnt();
 
-    // get te index to delete in 'ownerIds' array and delete it
-    uint256 idxToDel = antsInfo[_antId].ownerCounter;
+    // get te index to delete in '_ownerIds' array and delete it
+    uint256 idxToDel = _antsInfo[_antId].ownerCounter;
     // this is possible because the ant ids are incremental and equal in both mappings
-    delete ownerIds[msg.sender][idxToDel];
+    delete _ownerIds[msg.sender][idxToDel];
 
-    // delete ant in 'antsInfo' and update 'antsAlive'
-    delete antsInfo[_antId];
+    // delete ant in '_antsInfo' and update 'antsAlive'
+    delete _antsInfo[_antId];
     antsAlive -= 1;
 
     // burn ant token and transfer 'ANTS_PRICE' to 'msg.sender'
@@ -137,10 +137,10 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   // method for laying eggs from ants
   function layEggs(uint256 _antId) external override nonReentrant checkAntOwner(_antId) {
     // check the ant exists and is alive
-    if (!antsInfo[_antId].isAlive) revert NoAnt();
+    if (!_antsInfo[_antId].isAlive) revert NoAnt();
 
     // check that 'MIN_LAY_PERIOD_ is finished or that the ant has been recently created
-    uint256 lastEggCreated = antsInfo[_antId].timeLastEggLayed;
+    uint256 lastEggCreated = _antsInfo[_antId].timeLastEggLayed;
     if ((lastEggCreated != ANT_RECENTLY_CREATED) && (block.timestamp - lastEggCreated < MIN_LAY_PERIOD)) {
       revert NotEnoughTimePassed();
     }
@@ -177,12 +177,12 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
 
     // calc eggs amount and update this info
     uint256 eggsAmount = _calcEggsCreation(randomNumber);
-    antsInfo[antId].eggsCreated += eggsAmount;
-    antsInfo[antId].timeLastEggLayed = block.timestamp;
+    _antsInfo[antId].eggsCreated += eggsAmount;
+    _antsInfo[antId].timeLastEggLayed = block.timestamp;
 
     // calc if ant dies, and if it does, update that state
     bool antDies = _antDies(antId, randomNumber);
-    if (antDies) antsInfo[antId].isAlive = false;
+    if (antDies) _antsInfo[antId].isAlive = false;
 
     // update the queue index for the next time this func has to execute the logic it will respect the
     // correct order (the first which execute will lay first the egg/eggs)
@@ -190,15 +190,15 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     _queueCounter += 1;
 
     // mint the eggs amount to the ant owner
-    eggs.mint(antsInfo[antId].owner, eggsAmount);
+    eggs.mint(_antsInfo[antId].owner, eggsAmount);
 
-    emit EggsLayed(antsInfo[antId].owner, eggsAmount);
+    emit EggsLayed(_antsInfo[antId].owner, eggsAmount);
   }
 
   // method for checking if the ant will die or not
   function _antDies(uint256 _antId, uint256 randomNumber) internal view returns (bool antDies) {
     // get 'eggsCreated' from ant and set 'antDIes' to false
-    uint256 eggsCreated = antsInfo[_antId].eggsCreated;
+    uint256 eggsCreated = _antsInfo[_antId].eggsCreated;
     antDies = false;
 
     // there is a random part (1, 30) but another part that is based in how many eggs the ant has created
@@ -226,7 +226,7 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     eggs.burn(msg.sender, MAX_ANTS_PER_EGG);
   }
 
-  // method for updating 'antsInfo' and 'ownerIds' state before is transferred between 2 addresses
+  // method for updating '_antsInfo' and '_ownerIds' state before is transferred between 2 addresses
   function _beforeTokenTransfer(
     address from,
     address to,
@@ -236,42 +236,27 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     if (from == address(0) || to == address(0)) return;
 
     // delete the previous owner info
-    uint256 prevOwnerId = antsInfo[tokenId].ownerCounter;
-    delete ownerIds[from][prevOwnerId];
+    uint256 prevOwnerId = _antsInfo[tokenId].ownerCounter;
+    delete _ownerIds[from][prevOwnerId];
 
-    // update ant 'antsinfo' mapping state with the new owner info
-    uint256 antIdxTo = ownerIds[to].length;
-    antsInfo[_antIdsCounter].owner = to;
-    antsInfo[_antIdsCounter].ownerCounter = antIdxTo;
+    // update ant '_antsinfo' mapping state with the new owner info
+    uint256 antIdxTo = _ownerIds[to].length;
+    _antsInfo[_antIdsCounter].owner = to;
+    _antsInfo[_antIdsCounter].ownerCounter = antIdxTo;
 
-    // push to new owner 'ownerIds' array
-    ownerIds[to].push(tokenId);
+    // push to new owner '_ownerIds' array
+    _ownerIds[to].push(tokenId);
   }
 
   /* view functions */
 
   // method for get all owner ant ids
   function getOwnerAntIds(address ownerAddr) external view returns (uint256[] memory) {
-    return ownerIds[ownerAddr];
+    return _ownerIds[ownerAddr];
   }
 
   // method for get an ant info
   function getAntInfo(uint256 antId) external view returns (Ant memory) {
-    return antsInfo[antId];
-  }
-
-  // method for get a proposal info
-  function getProposalInfo(uint256 proposedPrice) external view returns (ProposalInfo memory) {
-    return proposals[proposedPrice];
-  }
-
-  // method for get an array with all proposed prices
-  function getProposalPrices() external view returns (uint256[] memory) {
-    return proposedPrices;
-  }
-
-  // method for get the contract ETH balance
-  function getContractBalance() external view returns (uint256) {
-    return address(this).balance;
+    return _antsInfo[antId];
   }
 }
