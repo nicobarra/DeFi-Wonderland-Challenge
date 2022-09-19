@@ -23,16 +23,16 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
   uint256 public constant MIN_LAY_PERIOD = 10 minutes;
   bool public constant ANT_IS_ALIVE = true;
 
-  // internal variables
-  uint256 private _antIdsCounter;
-
   // VRF V2 (randomness) variables
+  uint16 public constant REQUEST_CONFIRMATIONS = 3; // Block confirmations before send randomness
+  uint32 private immutable _callbackGasLimit; // Max gas price you're willing to pay in wei in the VRF V2 callback (fullFillRandomness, the 2nd tx)
+  uint32 public constant NUM_NUMBERS = 1; // Number of nums that VRF is gonna return
+  uint64 private immutable _subscriptionId; // id of the VRF V2 sub
   VRFCoordinatorV2Interface private immutable _vrfCoordinator;
   bytes32 private immutable _keyHash; // Max gas price you're willing to pay in wei for a request (in VRF V2)
-  uint64 private immutable _subscriptionId; // id of the VRF V2 sub
-  uint32 private immutable _callbackGasLimit; // Max gas price you're willing to pay in wei in the VRF V2 callback (fullFillRandomness, the 2nd tx)
-  uint16 public constant REQUEST_CONFIRMATIONS = 3; // Block confirmations before send randomness
-  uint32 public constant NUM_NUMBERS = 1; // Number of nums that VRF is gonna return
+
+  // internal variables
+  uint256 private _antIdsCounter;
 
   // only for have a recording
   uint256 public antsAlive = 0;
