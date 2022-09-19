@@ -84,11 +84,21 @@ contract CryptoAnts is ERC721, ICryptoAnts, AntsDAO, VRFConsumerBaseV2, Reentran
     proposalPeriod = _proposalPeriod;
   }
 
+  receive() external payable {
+    buyEggs();
+  }
+
   // method for buying eggs
-  function buyEggs() external payable override nonReentrant {
+  function buyEggs() public payable override nonReentrant {
     // get and check the eggs 'msg.sender' can buy are greater than one
     uint256 eggsSenderCanBuy = (msg.value / eggPrice);
     if (eggsSenderCanBuy < 1) revert NoEggs();
+
+    // implement dust collector
+    uint256 refundAmm = msg.value - (eggsSenderCanBuy * eggPrice);
+    if (refundAmm > 0) {
+      payable(msg.sender).transfer(refundAmm);
+    }
 
     // mint 'eggsSenderCanBuy' to 'msg.sender'
     eggs.mint(msg.sender, eggsSenderCanBuy);
