@@ -57,7 +57,7 @@ if (network.name === 'hardhat') {
       logger.info(`egg bought!`);
 
       // firstly we are giong to make price cheaper so gas is enough for buying multiple eggs
-      const newPrice = ethers.utils.parseEther('0.0022');
+      const newPrice = ethers.utils.parseEther('0.0023');
       logger.info(`Proposing new price..`);
       tx = await cryptoAnts.connect(user).proposeEggPrice(newPrice, { gasLimit: GAS_LIMIT });
       await tx.wait();
@@ -75,8 +75,12 @@ if (network.name === 'hardhat') {
 
       logger.info(`Delaying period ...`);
       const period = await cryptoAnts.MIN_LAY_PERIOD();
+      logger.info(`Period: ${period.toString()}`);
       await delay(period.toNumber() + 1);
       logger.info(`Period finished`);
+
+      const propInfo = await cryptoAnts.getProposalInfo(proposalId);
+      logger.info(`propInfo: ${propInfo[0]}, ${propInfo[1]}, ${propInfo[2]}, ${propInfo[3]}`);
 
       logger.info('Executing proposal ...');
       tx = await cryptoAnts.connect(user).executeProposal(proposalId, { gasLimit: GAS_LIMIT });
@@ -101,7 +105,7 @@ if (network.name === 'hardhat') {
 
       // This for waiting the VRF to exec fulfillrandomness()
       logger.info(`delaying 120 secs ..`);
-      await delay(60000 * 2);
+      await delay(60 * 2);
       logger.info(`120 secs delayed!`);
 
       // create and send some ants to the challenge address
